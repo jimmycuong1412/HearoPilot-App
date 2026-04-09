@@ -4,6 +4,10 @@
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-API%2030-green.svg)](https://developer.android.com/about/versions/11/highlights)
 [![Build](https://github.com/Helldez/HearoPilot-App/actions/workflows/build.yml/badge.svg)](https://github.com/Helldez/HearoPilot-App/actions/workflows/build.yml)
 
+<a href="https://play.google.com/store/apps/details?id=com.hearopilot.app">
+  <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="60">
+</a>
+
 **On-device audio transcription and AI insights for Android**
 
 HearoPilot combines a local Speech-to-Text engine with a local Large Language Model to deliver
