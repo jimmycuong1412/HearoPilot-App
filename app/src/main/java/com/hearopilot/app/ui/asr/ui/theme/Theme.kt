@@ -12,10 +12,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.hearopilot.app.domain.model.ThemeMode
 
 /**
- * d.ai transcription Material 3 Theme
+ * MeetMind AI Material 3 Theme
  *
  * Design philosophy (2026):
- * - Color restraint: purple (#5E17EB) only for primary actions
+ * - Color restraint: slate-violet (#6264A7) only for primary actions
  * - Warm neutrals for calm, professional feel
  * - Borders over shadows for modern flat design
  * - Surface layering with subtle tints
@@ -92,7 +92,7 @@ private val DarkColorScheme = darkColorScheme(
 fun LibellulaTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     // Dynamic color is available on Android 12+ (Material You)
-    // Setting to false to maintain brand identity with #5E17EB
+    // Setting to false to maintain brand identity with #6264A7
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {

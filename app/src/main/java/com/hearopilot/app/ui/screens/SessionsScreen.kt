@@ -11,7 +11,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +30,8 @@ import androidx.compose.ui.graphics.Brush
 import com.hearopilot.app.ui.ui.theme.*
 import com.hearopilot.app.domain.model.RecordingMode
 import com.hearopilot.app.domain.model.TranscriptionSession
+import com.hearopilot.app.domain.model.InsightStrategy
+import com.hearopilot.app.domain.model.SupportedLanguage
 import com.hearopilot.app.presentation.sessions.SessionsViewModel
 import com.hearopilot.app.ui.components.DaytimeSkyBanner
 import com.hearopilot.app.ui.components.ShimmerSessionList
@@ -53,6 +57,8 @@ fun SessionsScreen(
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var sessionIdToDelete by remember { mutableStateOf<String?>(null) }
+    var sessionIdToAnalyze by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -148,18 +154,85 @@ fun SessionsScreen(
                     SessionsList(
                         sessions = uiState.sessions,
                         totalDataSizeBytes = uiState.totalDataSizeBytes,
-                        onSessionClick = onNavigateToSessionDetails
+                        onSessionClick = onNavigateToSessionDetails,
+                        onDeleteClick = { sessionId ->
+                            sessionIdToDelete = sessionId
+                        },
+                        onAnalyzeClick = { sessionId ->
+                            sessionIdToAnalyze = sessionId
+                        }
                     )
                 }
             }
+        }
+
+        // AI Insight Confirmation Dialog
+        sessionIdToAnalyze?.let { sessionId ->
+            val session = uiState.sessions.find { it.id == sessionId }
+            var selectedLang by remember { mutableStateOf("en") } // Default to English or use a dynamic default
+
+            HistoryInsightConfirmDialog(
+                outputLanguage = selectedLang,
+                onOutputLanguageChange = { selectedLang = it },
+                onDismiss = { sessionIdToAnalyze = null },
+                onConfirm = {
+                    val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    val suffix = "(AI Analysis at $timestamp)"
+                    viewModel.createSession(
+                        name = (session?.name ?: "Session") + " " + suffix,
+                        mode = session?.mode ?: RecordingMode.SIMPLE_LISTENING,
+                        inputLanguage = session?.inputLanguage ?: "en",
+                        outputLanguage = selectedLang,
+                        insightStrategy = InsightStrategy.END_OF_SESSION,
+                        topic = session?.topic
+                    ) { newSessionId ->
+                        onNavigateToRecording(newSessionId)
+                    }
+                    sessionIdToAnalyze = null
+                }
+            )
+        }
+
+        // Delete Confirmation Dialog
+        sessionIdToDelete?.let { sessionId ->
+            val session = uiState.sessions.find { it.id == sessionId }
+            AlertDialog(
+                onDismissRequest = { sessionIdToDelete = null },
+                title = { Text(stringResource(R.string.delete_session_title)) },
+                text = {
+                    Text(
+                        if (session?.name != null) {
+                            stringResource(R.string.delete_session_message, session.name!!)
+                        } else {
+                            stringResource(R.string.delete_session_message_unnamed)
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteSession(sessionId)
+                            sessionIdToDelete = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(stringResource(R.string.delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { sessionIdToDelete = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
         }
 
         // New Session Dialog
         if (uiState.showNewSessionDialog) {
             NewSessionDialog(
                 onDismiss = { viewModel.hideNewSessionDialog() },
-                onConfirm = { name, mode, outputLang, strategy, topic ->
-                    viewModel.createSession(name, mode, outputLang, strategy, topic) { sessionId ->
+                onConfirm = { name, mode, inputLang, outputLang, strategy, topic ->
+                    viewModel.createSession(name, mode, inputLang, outputLang, strategy, topic) { sessionId ->
                         onNavigateToRecording(sessionId)
                     }
                 },
@@ -176,7 +249,9 @@ fun SessionsScreen(
 private fun SessionsList(
     sessions: List<TranscriptionSession>,
     totalDataSizeBytes: Long,
-    onSessionClick: (String) -> Unit
+    onSessionClick: (String) -> Unit,
+    onDeleteClick: (String) -> Unit,
+    onAnalyzeClick: (String) -> Unit
 ) {
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
@@ -194,6 +269,8 @@ private fun SessionsList(
             SessionCard(
                 session = session,
                 onClick = { onSessionClick(session.id) },
+                onDelete = { onDeleteClick(session.id) },
+                onAnalyze = { onAnalyzeClick(session.id) },
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .fillMaxWidth()
@@ -314,6 +391,8 @@ private fun SessionsHeader(sessions: List<TranscriptionSession>, totalDataSizeBy
 private fun SessionCard(
     session: TranscriptionSession,
     onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onAnalyze: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -323,7 +402,12 @@ private fun SessionCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             // Left mode-colour accent bar — requires IntrinsicSize.Min on the Row
             Box(
                 modifier = Modifier
@@ -346,7 +430,7 @@ private fun SessionCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = if (session.name != null) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -385,6 +469,36 @@ private fun SessionCard(
                             maxLines = 1
                         )
                     }
+                }
+            }
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Generate AI Insight button
+                IconButton(
+                    onClick = onAnalyze
+                ) {
+                    Icon(
+                        imageVector = AppIcons.AutoAwesome,
+                        contentDescription = stringResource(R.string.generate_history_insight),
+                        tint = BrandPurple,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Delete button
+                IconButton(
+                    onClick = onDelete
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Delete,
+                        contentDescription = stringResource(R.string.delete),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

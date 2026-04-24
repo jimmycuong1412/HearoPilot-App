@@ -5,25 +5,25 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * Material 3 Color Palette for d.ai transcription
- * Generated from brand seed color #5E17EB (purple from logo)
+ * Material 3 Color Palette for MeetMind AI
+ * Generated from brand seed color #6264A7 (Teams-aligned slate-violet)
  *
  * Design philosophy:
- * - Color restraint: purple only for primary actions
+ * - Color restraint: slate-violet only for primary actions
  * - Warm neutrals for professional, calm interface
  * - High contrast for accessibility (WCAG AA minimum)
  */
 
 // Brand seed color
-val BrandPurple = Color(0xFF5E17EB)
-val BrandPurpleLight = Color(0xFF8149F2)  // Lighter shade for gradients
-val BrandPurpleDark = Color(0xFF4A0FD4)   // Darker shade for depth
+val BrandPurple = Color(0xFF6264A7)       // Teams slate-violet (was #5E17EB)
+val BrandPurpleLight = Color(0xFF8B8CC7)  // Lighter shade for gradients (was #8149F2)
+val BrandPurpleDark = Color(0xFF464775)   // Darker shade / header (was #4A0FD4)
 
-// Light Mode - Primary Palette (Purple)
-val md_theme_light_primary = Color(0xFF5E17EB)
+// Light Mode - Primary Palette (Slate-Violet)
+val md_theme_light_primary = Color(0xFF6264A7)
 val md_theme_light_onPrimary = Color(0xFFFFFFFF)
-val md_theme_light_primaryContainer = Color(0xFFE7DEFF)
-val md_theme_light_onPrimaryContainer = Color(0xFF21005E)
+val md_theme_light_primaryContainer = Color(0xFFE8E8F5)
+val md_theme_light_onPrimaryContainer = Color(0xFF1E1F4B)
 
 // Light Mode - Surfaces & Backgrounds
 val md_theme_light_background = Color(0xFFF8F9FA)  // Warm white, not pure white
@@ -62,10 +62,10 @@ val md_theme_light_tertiaryContainer = Color(0xFFFFD8E4)
 val md_theme_light_onTertiaryContainer = Color(0xFF31111D)
 
 // Dark Mode - Primary Palette
-val md_theme_dark_primary = Color(0xFFCFBCFF)
-val md_theme_dark_onPrimary = Color(0xFF381E72)
-val md_theme_dark_primaryContainer = Color(0xFF4F378B)
-val md_theme_dark_onPrimaryContainer = Color(0xFFE7DEFF)
+val md_theme_dark_primary = Color(0xFFB4B5DF)
+val md_theme_dark_onPrimary = Color(0xFF2B2C5A)
+val md_theme_dark_primaryContainer = Color(0xFF464775)
+val md_theme_dark_onPrimaryContainer = Color(0xFFE8E8F5)
 
 // Dark Mode - Surfaces & Backgrounds (OLED-friendly)
 val md_theme_dark_background = Color(0xFF1C1B1F)
@@ -192,7 +192,7 @@ val ModeTranslationGradient = Brush.linearGradient(
 
 // ── Download immersive screen ────────────────────────────────────────────────
 /** Deep navy used as the bottom stop of the full-screen download gradient. */
-val DownloadImmersiveNavy = Color(0xFF0A0A1E)
+val DownloadImmersiveNavy = Color(0xFF1A1A2E)
 
 /** Full-screen vertical gradient for the immersive downloading state. */
 val DownloadImmersiveGradient = Brush.verticalGradient(

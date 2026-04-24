@@ -1,5 +1,6 @@
 package com.hearopilot.app.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -135,6 +137,17 @@ fun NewSessionDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Pulsing Start button — gentle breathe animation draws attention
+                            val infiniteTransition = rememberInfiniteTransition(label = "start_pulse")
+                            val startScale by infiniteTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.06f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(900, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "start_scale"
+                            )
                             Button(
                                 onClick = {
                                     val langArg = outputLanguage.ifEmpty { null }
@@ -146,8 +159,17 @@ fun NewSessionDialog(
                                     contentColor = BrandPurpleDark
                                 ),
                                 shape = MaterialTheme.shapes.medium,
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                modifier = Modifier.scale(startScale)
                             ) {
+                                Icon(
+                                    imageVector = AppIcons.Mic,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .padding(end = 0.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = stringResource(R.string.start),
                                     fontWeight = FontWeight.Bold,
@@ -458,7 +480,7 @@ fun LanguageSelector(
                     )
                     HorizontalDivider()
                 }
-                languages.forEach { lang ->
+                languages.forEachIndexed { index, lang ->
                     DropdownMenuItem(
                         text = { Text(lang.nativeName) },
                         onClick = { onLanguageSelected(lang.code); expanded = false },
@@ -466,6 +488,12 @@ fun LanguageSelector(
                             { Icon(AppIcons.CheckCircle, null, modifier = Modifier.size(16.dp)) }
                         } else null
                     )
+                    if (index < languages.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             }
         }
