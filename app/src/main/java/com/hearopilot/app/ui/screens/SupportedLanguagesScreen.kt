@@ -30,7 +30,6 @@ private fun languageFlagEmoji(code: String): String {
         "bg" -> "BG"
         "cs" -> "CZ"
         "da" -> "DK"
-        "de" -> "DE"
         "el" -> "GR"
         "en" -> "GB"
         "es" -> "ES"
@@ -72,6 +71,8 @@ private fun languageFlagEmoji(code: String): String {
  */
 @Composable
 fun SupportedLanguagesScreen(
+    selectedLanguageCode: String,
+    onLanguageSelected: (String) -> Unit,
     onContinue: () -> Unit
 ) {
     Surface(
@@ -117,7 +118,9 @@ fun SupportedLanguagesScreen(
                 items(SupportedLanguages.ALL) { language ->
                     LanguageCell(
                         flag = languageFlagEmoji(language.code),
-                        name = language.nativeName
+                        name = language.nativeName,
+                        isSelected = language.code == selectedLanguageCode,
+                        onClick = { onLanguageSelected(language.code) }
                     )
                 }
             }
@@ -137,12 +140,25 @@ fun SupportedLanguagesScreen(
 }
 
 @Composable
-private fun LanguageCell(flag: String, name: String) {
+private fun LanguageCell(
+    flag: String,
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
     Card(
+        onClick = onClick,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = if (isSelected) 
+                MaterialTheme.colorScheme.primaryContainer 
+            else 
+                MaterialTheme.colorScheme.background
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = if (isSelected) 
+            androidx.compose.foundation.BorderStroke(2.dp, BrandPrimary) 
+        else 
+            null
     ) {
         Column(
             modifier = Modifier

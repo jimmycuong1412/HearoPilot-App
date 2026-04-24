@@ -10,12 +10,13 @@ import kotlinx.coroutines.flow.Flow
  */
 interface SttRepository {
     /**
-     * Initialize the STT engine with a model.
+     * Initialize the STT engine with a model and language.
      *
      * @param modelPath Absolute path to the ONNX model directory
+     * @param languageCode BCP-47 language code (e.g. "en", "vi")
      * @return Result indicating success or failure
      */
-    suspend fun initialize(modelPath: String): Result<Unit>
+    suspend fun initialize(modelPath: String, languageCode: String): Result<Unit>
 
     /**
      * Start streaming audio recording and transcription.

@@ -72,6 +72,9 @@ class SetupViewModel @Inject constructor(
     private val _isLlmReady = MutableStateFlow(false)
     val isLlmReady: StateFlow<Boolean> = _isLlmReady.asStateFlow()
 
+    private val _selectedLanguageCode = MutableStateFlow("en")
+    val selectedLanguageCode: StateFlow<String> = _selectedLanguageCode.asStateFlow()
+
     private val _isOnboardingComplete = MutableStateFlow(false)
     val isOnboardingComplete: StateFlow<Boolean> = _isOnboardingComplete.asStateFlow()
 
@@ -185,7 +188,15 @@ class SetupViewModel @Inject constructor(
     fun proceedToNextStep() {
         _currentStep.value = when (_currentStep.value) {
             OnboardingStep.WELCOME -> OnboardingStep.LANGUAGES
-            OnboardingStep.LANGUAGES -> OnboardingStep.STT_DOWNLOAD
+            OnboardingStep.LANGUAGES -> {
+                // Update primary language in settings when leaving the language selection screen.
+                // This ensures MainViewModel knows which language to use on first launch.
+                viewModelScope.launch {
+                    val current = settingsRepository.getSettings().first()
+                    settingsRepository.updateSettings(current.copy(primaryLanguage = _selectedLanguageCode.value))
+                }
+                OnboardingStep.STT_DOWNLOAD
+            }
             OnboardingStep.STT_DOWNLOAD -> OnboardingStep.LLM_DOWNLOAD
             OnboardingStep.LLM_DOWNLOAD -> {
                 completeOnboarding()
@@ -196,12 +207,20 @@ class SetupViewModel @Inject constructor(
     }
 
     /**
+     * Set the primary language for transcription.
+     */
+    fun selectLanguage(languageCode: String) {
+        _selectedLanguageCode.value = languageCode
+    }
+
+    /**
      * Start STT model download via Android DownloadManager.
      * Downloads survive app restart and are battery optimized.
      */
     fun startSttDownload() {
-        Log.i(TAG, "Starting STT download via Android DownloadManager")
-        androidDownloadManager.startSttDownload()
+        val lang = _selectedLanguageCode.value
+        Log.i(TAG, "Starting STT download ($lang) via Android DownloadManager")
+        androidDownloadManager.startSttDownload(lang)
     }
 
     /**

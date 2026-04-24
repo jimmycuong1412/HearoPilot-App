@@ -292,7 +292,8 @@ fun SessionDetailsScreen(
         // Confirm before starting history insight generation
         if (uiState.showHistoryInsightConfirm) {
             val originalName = uiState.sessionDetails?.session?.name
-            val copySuffix = stringResource(R.string.history_insight_copy_suffix)
+            val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val copySuffix = stringResource(R.string.history_insight_copy_suffix_format, timestamp)
             val newSessionName = if (!originalName.isNullOrBlank()) "$originalName $copySuffix" else null
             val modelNotDownloadedError = stringResource(R.string.llm_model_not_downloaded_error)
 
@@ -1253,7 +1254,7 @@ private fun EditInsightFullDialog(
  * Clearly communicates that a copy will be created.
  */
 @Composable
-private fun HistoryInsightConfirmDialog(
+fun HistoryInsightConfirmDialog(
     outputLanguage: String,
     onOutputLanguageChange: (String) -> Unit,
     onDismiss: () -> Unit,

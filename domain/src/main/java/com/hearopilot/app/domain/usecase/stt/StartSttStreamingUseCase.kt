@@ -11,12 +11,13 @@ class StartSttStreamingUseCase(
     private val sttRepository: SttRepository
 ) {
     /**
-     * Initialize STT with the specified model.
+     * Initialize STT with the specified model and language.
      *
      * @param modelPath Absolute path to the ONNX model directory
+     * @param languageCode BCP-47 language code (e.g. "en", "vi")
      * @return Result indicating success or failure
      */
-    suspend operator fun invoke(modelPath: String): Result<Unit> {
-        return sttRepository.initialize(modelPath)
+    suspend operator fun invoke(modelPath: String, languageCode: String = "en"): Result<Unit> {
+        return sttRepository.initialize(modelPath, languageCode)
     }
 }

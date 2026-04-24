@@ -54,6 +54,7 @@ private val PROGRESS_BAR_BOTTOM_CLEARANCE = 58.dp
  */
 @Composable
 fun SttDownloadScreen(
+    selectedLanguageCode: String,
     downloadState: DownloadState,
     onStartDownload: () -> Unit,
     onRetry: () -> Unit,
@@ -72,7 +73,7 @@ fun SttDownloadScreen(
             is DownloadState.Downloading -> SttImmersiveLayout(downloadState, animatedProgress)
             is DownloadState.Completed   -> SttResultLayout(downloadState, onContinue = onContinue, onRetry = onRetry)
             is DownloadState.Error       -> SttResultLayout(downloadState, onContinue = onContinue, onRetry = onRetry)
-            else                         -> SttIdleLayout(onStartDownload)
+            else                         -> SttIdleLayout(selectedLanguageCode, onStartDownload)
         }
     }
 }
@@ -250,7 +251,13 @@ private fun SttResultLayout(
  * Hero (no bottom rounding) + overlapping content sheet with model info and download button.
  */
 @Composable
-private fun SttIdleLayout(onStartDownload: () -> Unit) {
+private fun SttIdleLayout(
+    selectedLanguageCode: String,
+    onStartDownload: () -> Unit
+) {
+    val languageName = remember(selectedLanguageCode) {
+        com.hearopilot.app.domain.model.SupportedLanguages.getByCode(selectedLanguageCode)?.nativeName ?: "English"
+    }
     Column(modifier = Modifier.fillMaxSize()) {
 
         // ── Hero ─────────────────────────────────────────────────────────
@@ -328,6 +335,10 @@ private fun SttIdleLayout(onStartDownload: () -> Unit) {
                         SttModelInfoRow(
                             stringResource(R.string.onboarding_model_label),
                             stringResource(R.string.onboarding_stt_model_name)
+                        )
+                        SttModelInfoRow(
+                            stringResource(R.string.onboarding_language_label),
+                            languageName
                         )
                         SttModelInfoRow(
                             stringResource(R.string.onboarding_runs_label),

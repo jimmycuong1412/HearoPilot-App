@@ -29,6 +29,9 @@ data class AppSettings(
     // Translation settings — stores BCP-47 locale code (see SupportedLanguages)
     val translationTargetLanguage: String = SupportedLanguages.DEFAULT.code,
 
+    // Primary language for transcription (e.g., "en", "vi")
+    val primaryLanguage: String = "en",
+
     // General settings
     val sttModelPath: String = "assets", // STT models are bundled in assets
     val llmModelPath: String = "",

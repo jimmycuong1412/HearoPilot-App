@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -44,19 +47,27 @@ class TranscriptionRepositoryImpl @Inject constructor(
     override suspend fun createSession(
         name: String?,
         mode: RecordingMode,
+        inputLanguage: String,
         outputLanguage: String?,
         insightStrategy: InsightStrategy,
         topic: String?
     ): Result<TranscriptionSession> {
         return try {
             val now = System.currentTimeMillis()
+            val finalName = if (name.isNullOrBlank()) {
+                val dateFormat = SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault())
+                dateFormat.format(Date(now))
+            } else {
+                name
+            }
+
             val session = TranscriptionSession(
                 id = UUID.randomUUID().toString(),
-                name = name,
+                name = finalName,
                 createdAt = now,
                 lastModifiedAt = now,
                 mode = mode,
-                inputLanguage = "it", // Auto-detected by STT, default to Italian
+                inputLanguage = inputLanguage,
                 outputLanguage = outputLanguage,
                 insightStrategy = insightStrategy,
                 topic = topic?.takeIf { it.isNotBlank() }

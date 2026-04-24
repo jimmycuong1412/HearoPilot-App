@@ -19,8 +19,8 @@ class SttRepositoryImpl @Inject constructor(
     private val sttDataSource: SttDataSource
 ) : SttRepository {
 
-    override suspend fun initialize(modelPath: String): Result<Unit> {
-        return sttDataSource.initialize(modelPath)
+    override suspend fun initialize(modelPath: String, languageCode: String): Result<Unit> {
+        return sttDataSource.initialize(modelPath, languageCode)
     }
 
     override fun startStreaming(): Flow<TranscriptionSegment> {

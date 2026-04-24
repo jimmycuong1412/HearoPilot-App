@@ -209,34 +209,31 @@ class ModelDownloadManager(
     }.flowOn(Dispatchers.IO)
 
     /**
-     * Check if STT model is already downloaded.
+     * Check if STT model is already downloaded for a specific language.
      */
-    fun isSttModelDownloaded(): Boolean {
-        val sttDir = File(modelsDir, "stt")
-        return modelConfig.sttFiles.all { filename ->
+    fun isSttModelDownloaded(languageCode: String = "en"): Boolean {
+        val config = com.hearopilot.app.data.config.modelConfigForLanguage(languageCode)
+        val sttDir = File(modelsDir, "stt/${languageCode.take(2)}")
+        return config.sttFiles.all { filename ->
             val file = File(sttDir, filename)
             file.exists() && file.length() > 0
         }
     }
 
     /**
-     * Get the path to the STT model directory.
+     * Get the path to the STT model directory for a specific language.
      * Returns the path if all files exist, null otherwise.
      */
-    fun getSttModelPath(): String? {
-        return if (isSttModelDownloaded()) {
-            File(modelsDir, "stt").absolutePath
+    fun getSttModelPath(languageCode: String = "en"): String? {
+        return if (isSttModelDownloaded(languageCode)) {
+            File(modelsDir, "stt/${languageCode.take(2)}").absolutePath
         } else {
             null
         }
     }
 
     /**
-     * Download STT model files from HuggingFace.
-     * Downloads 4 files sequentially with aggregated progress.
-     */
-    /**
-     * Download all 4 STT model files sequentially with resume capability.
+     * Download all STT model files sequentially with resume capability for a specific language.
      *
      * Each file is downloaded to a .partial temp file and renamed to its final name
      * only on successful completion. On failure:
@@ -247,23 +244,24 @@ class ModelDownloadManager(
      * This mirrors the LLM resume strategy so that any network interruption, even
      * on the first download attempt, does not force a full restart on retry.
      */
-    fun downloadSttModel(): Flow<DownloadProgress> = flow {
-        val sttDir = File(modelsDir, "stt")
+    fun downloadSttModel(languageCode: String = "en"): Flow<DownloadProgress> = flow {
+        val config = com.hearopilot.app.data.config.modelConfigForLanguage(languageCode)
+        val sttDir = File(modelsDir, "stt/${languageCode.take(2)}")
         sttDir.mkdirs()
 
-        if (isSttModelDownloaded()) {
-            Log.i(TAG, "STT model already downloaded: ${sttDir.absolutePath}")
+        if (isSttModelDownloaded(languageCode)) {
+            Log.i(TAG, "STT model ($languageCode) already downloaded: ${sttDir.absolutePath}")
             emit(DownloadProgress(100_000_000, 100_000_000, 100))
             return@flow
         }
 
         // Best-effort HEAD requests for real file sizes; fall back to estimates on failure
         // so that a missing network at retry time does not block the size lookup.
-        Log.i(TAG, "Fetching actual file sizes...")
+        Log.i(TAG, "Fetching actual file sizes for $languageCode...")
         val actualFileSizes = mutableMapOf<String, Long>()
-        modelConfig.sttFiles.forEach { filename ->
+        config.sttFiles.forEach { filename ->
             try {
-                val connection = URL("${modelConfig.sttBaseUrl}/$filename").openConnection() as HttpURLConnection
+                val connection = URL("${config.sttBaseUrl}/$filename").openConnection() as HttpURLConnection
                 connection.requestMethod = "HEAD"
                 connection.connectTimeout = 15000
                 connection.instanceFollowRedirects = true
@@ -284,14 +282,14 @@ class ModelDownloadManager(
 
         // Seed with completed files only. Partial-file bytes are added per-file
         // in the loop (startByte) so they are counted exactly once.
-        var totalBytesDownloaded = modelConfig.sttFiles.sumOf { filename ->
+        var totalBytesDownloaded = config.sttFiles.sumOf { filename ->
             val f = File(sttDir, filename)
             if (f.exists() && f.length() > 0) f.length() else 0L
         }
 
-        Log.i(TAG, "Total download size: ${totalBytes / 1_000_000}MB, already completed: ${totalBytesDownloaded / 1_000_000}MB")
+        Log.i(TAG, "Total download size ($languageCode): ${totalBytes / 1_000_000}MB, already completed: ${totalBytesDownloaded / 1_000_000}MB")
 
-        modelConfig.sttFiles.forEachIndexed { index, filename ->
+        config.sttFiles.forEachIndexed { index, filename ->
             val outputFile = File(sttDir, filename)
             val partialFile = File(sttDir, "$filename.partial")
 
@@ -304,7 +302,7 @@ class ModelDownloadManager(
             // Resume from .partial if available (Range request)
             val startByte = partialFile.takeIf { it.exists() }?.length() ?: 0L
 
-            Log.i(TAG, "Downloading STT file ${index + 1}/${modelConfig.sttFiles.size}: $filename" +
+            Log.i(TAG, "Downloading STT file ${index + 1}/${config.sttFiles.size}: $filename" +
                 if (startByte > 0) " (resuming from ${startByte / 1_000_000}MB)" else "")
 
             // Count already-downloaded partial bytes so progress is correct from the start
@@ -312,7 +310,7 @@ class ModelDownloadManager(
 
             var connection: HttpURLConnection? = null
             try {
-                connection = URL("${modelConfig.sttBaseUrl}/$filename").openConnection() as HttpURLConnection
+                connection = URL("${config.sttBaseUrl}/$filename").openConnection() as HttpURLConnection
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
                 connection.instanceFollowRedirects = true
@@ -371,7 +369,7 @@ class ModelDownloadManager(
             }
         }
 
-        if (!isSttModelDownloaded()) {
+        if (!isSttModelDownloaded(languageCode)) {
             throw Exception("Download incomplete: some files are missing or empty")
         }
 
@@ -381,9 +379,14 @@ class ModelDownloadManager(
 
     /** Hardcoded size estimates used as fallback when HEAD requests fail. */
     private fun estimatedSttFileSize(filename: String): Long = when (filename) {
+        // English (Parakeet)
         "encoder.int8.onnx" -> 68_000_000L
         "decoder.int8.onnx" -> 10_000_000L
         "joiner.int8.onnx"  -> 15_000_000L
+        // Vietnamese (Zipformer)
+        "encoder-epoch-12-avg-8.int8.onnx" -> 85_000_000L
+        "decoder-epoch-12-avg-8.onnx"      -> 5_000_000L
+        "joiner-epoch-12-avg-8.int8.onnx"   -> 5_000_000L
         else                -> 100_000L
     }
 }

@@ -52,10 +52,12 @@ private fun OnboardingStep.pageIndex(): Int = when (this) {
 @Composable
 fun OnboardingScreen(
     currentStep: OnboardingStep,
+    selectedLanguageCode: String,
     sttDownloadState: DownloadState,
     llmDownloadState: DownloadState,
     canGoBack: Boolean,
     onGetStarted: () -> Unit,
+    onLanguageSelected: (String) -> Unit,
     onContinue: () -> Unit,
     onStartStt: () -> Unit,
     onRetryStt: () -> Unit,
@@ -87,8 +89,13 @@ fun OnboardingScreen(
 
             when (step) {
                 OnboardingStep.WELCOME -> WelcomeScreen(onGetStarted = onGetStarted)
-                OnboardingStep.LANGUAGES -> SupportedLanguagesScreen(onContinue = onContinue)
+                OnboardingStep.LANGUAGES -> SupportedLanguagesScreen(
+                    selectedLanguageCode = selectedLanguageCode,
+                    onLanguageSelected = onLanguageSelected,
+                    onContinue = onContinue
+                )
                 OnboardingStep.STT_DOWNLOAD -> SttDownloadScreen(
+                    selectedLanguageCode = selectedLanguageCode,
                     downloadState = sttDownloadState,
                     onStartDownload = onStartStt,
                     onRetry = onRetryStt,

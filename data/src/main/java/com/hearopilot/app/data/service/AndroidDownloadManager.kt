@@ -166,9 +166,11 @@ class AndroidDownloadManager @Inject constructor(
      * Downloads all 4 files sequentially with aggregated progress. Uses
      * ModelDownloadManager instead of Android DownloadManager to avoid the
      * MediaProvider private-path restriction on Android 12+.
+     *
+     * @param languageCode The language code (e.g., "en", "vi") to download.
      */
-    fun startSttDownload() {
-        Log.i(TAG, "Starting STT download via ModelDownloadManager")
+    fun startSttDownload(languageCode: String = "en") {
+        Log.i(TAG, "Starting STT download ($languageCode) via ModelDownloadManager")
         sttProgressJob?.cancel()
 
         downloadStateManager.updateSttState(
@@ -180,7 +182,7 @@ class AndroidDownloadManager @Inject constructor(
 
         sttProgressJob = scope.launch {
             try {
-                modelDownloadManager.downloadSttModel().collect { p ->
+                modelDownloadManager.downloadSttModel(languageCode).collect { p ->
                     downloadStateManager.updateSttState(
                         DownloadState.Downloading(
                             DownloadProgress(p.bytesDownloaded, p.totalBytes, p.percentage)
@@ -189,13 +191,11 @@ class AndroidDownloadManager @Inject constructor(
                 }
                 downloadStateManager.updateSttState(DownloadState.Completed)
             } catch (e: Exception) {
-                Log.e(TAG, "STT download failed", e)
+                Log.e(TAG, "STT download ($languageCode) failed", e)
                 downloadStateManager.updateSttState(
                     DownloadState.Error(e.message ?: "Download failed")
                 )
             }
-            // The service observes DownloadStateManager and stops itself when both
-            // downloads become idle; no explicit stop needed here.
         }
     }
 

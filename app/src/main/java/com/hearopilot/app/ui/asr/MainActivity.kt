@@ -113,6 +113,7 @@ fun LibellulaApp() {
 
     val isOnboardingComplete by setupViewModel.isOnboardingComplete.collectAsStateWithLifecycle()
     val currentStep by setupViewModel.currentStep.collectAsStateWithLifecycle()
+    val selectedLanguageCode by setupViewModel.selectedLanguageCode.collectAsStateWithLifecycle()
     val llmDownloadState by setupViewModel.llmDownloadState.collectAsStateWithLifecycle()
     val sttDownloadState by setupViewModel.sttDownloadState.collectAsStateWithLifecycle()
 
@@ -145,10 +146,12 @@ fun LibellulaApp() {
 
             OnboardingScreen(
                 currentStep = currentStep,
+                selectedLanguageCode = selectedLanguageCode,
                 sttDownloadState = sttDownloadState,
                 llmDownloadState = llmDownloadState,
                 canGoBack = setupViewModel.canGoBack(),
                 onGetStarted = { setupViewModel.proceedToNextStep() },
+                onLanguageSelected = { setupViewModel.selectLanguage(it) },
                 onContinue = { setupViewModel.proceedToNextStep() },
                 onStartStt = { setupViewModel.startSttDownload() },
                 onRetryStt = { setupViewModel.retrySttDownload() },

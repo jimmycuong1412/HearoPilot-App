@@ -2,12 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Restrict distribution to phone form factors only; tablets (large/xlarge screens) are excluded -->
     <supports-screens
         android:smallScreens="true"
         android:normalScreens="true"
-        android:largeScreens="false"
-        android:xlargeScreens="false" />
+        android:largeScreens="true"
+        android:xlargeScreens="true" />
 
     <!-- Explicitly remove the AD_ID permission injected by Firebase Analytics.
          The app does not use advertising ID; collection is disabled via meta-data. -->
@@ -30,7 +29,6 @@
     <application
         android:name="com.hearopilot.app.HearoPilotApplication"
         android:allowBackup="false"
-        android:extractNativeLibs="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:networkSecurityConfig="@xml/network_security_config"

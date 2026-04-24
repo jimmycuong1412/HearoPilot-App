@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         applicationId = "com.hearopilot.app"
-        minSdk = 30
+        minSdk = 35
         targetSdk = 35
         versionCode = 20260327
         versionName = "1.25.00"

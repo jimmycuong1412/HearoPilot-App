@@ -25,6 +25,7 @@ interface TranscriptionRepository {
      *
      * @param name Optional user-provided name for the session
      * @param mode Recording mode determining insight frequency and format
+     * @param inputLanguage Language being spoken (BCP-47 code)
      * @param outputLanguage Optional target language for translation mode
      * @param insightStrategy Whether insights are generated in real-time or at end of session
      * @param topic Optional main subject/topic for focused AI insights
@@ -33,6 +34,7 @@ interface TranscriptionRepository {
     suspend fun createSession(
         name: String?,
         mode: RecordingMode = RecordingMode.SIMPLE_LISTENING,
+        inputLanguage: String,
         outputLanguage: String? = null,
         insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
         topic: String? = null

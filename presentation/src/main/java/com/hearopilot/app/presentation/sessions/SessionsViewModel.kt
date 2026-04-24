@@ -100,6 +100,7 @@ class SessionsViewModel @Inject constructor(
      *
      * @param name Optional session name
      * @param mode Recording mode
+     * @param inputLanguage Language being spoken (BCP-47 code)
      * @param outputLanguage Optional target language for translation mode
      * @param insightStrategy Whether to generate insights in real-time or at end of session
      * @param topic Optional main subject/topic for focused AI insights
@@ -108,13 +109,14 @@ class SessionsViewModel @Inject constructor(
     fun createSession(
         name: String?,
         mode: RecordingMode,
+        inputLanguage: String,
         outputLanguage: String?,
         insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
         topic: String? = null,
         onSessionCreated: (String) -> Unit
     ) {
         viewModelScope.launch {
-            createSessionUseCase(name, mode, outputLanguage, insightStrategy, topic)
+            createSessionUseCase(name, mode, inputLanguage, outputLanguage, insightStrategy, topic)
                 .onSuccess { session ->
                     _uiState.update { it.copy(showNewSessionDialog = false) }
                     onSessionCreated(session.id)

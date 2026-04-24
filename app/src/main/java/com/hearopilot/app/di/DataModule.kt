@@ -41,11 +41,10 @@ object DataModule {
     @Singleton
     fun provideSttDataSource(
         @ApplicationContext context: Context,
-        recognizerProvider: javax.inject.Provider<OfflineRecognizer>,
         vadProvider: javax.inject.Provider<Vad>
     ): SttDataSource {
         val audioManager = context.getSystemService(AudioManager::class.java)
-        return SherpaOnnxDataSource(context, recognizerProvider, vadProvider, audioManager)
+        return SherpaOnnxDataSource(context, vadProvider, audioManager)
     }
 
     @Provides
