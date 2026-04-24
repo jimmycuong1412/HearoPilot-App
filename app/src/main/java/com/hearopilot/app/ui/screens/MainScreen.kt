@@ -3,6 +3,9 @@
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.app.Activity
+import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,6 +79,32 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
 
+    // Keep screen on while recording or transcribing. The user can override this
+    // (turn the screen off manually) via the lock button in the top bar.
+    var userDimmedScreen by remember { mutableStateOf(false) }
+    val shouldKeepScreenOn = (uiState.isRecording || uiState.isFinalizingSession) && !userDimmedScreen
+
+    // Walk the ContextWrapper chain to find the real Activity window.
+    // LocalContext in a Hilt/Compose setup is a ContextWrapper, not the Activity directly.
+    DisposableEffect(shouldKeepScreenOn) {
+        var ctx = context
+        while (ctx is ContextWrapper && ctx !is Activity) ctx = ctx.baseContext
+        val window = (ctx as? Activity)?.window
+        if (shouldKeepScreenOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // Re-enable screen-on whenever a new recording starts so the dim toggle resets.
+    LaunchedEffect(uiState.isRecording) {
+        if (uiState.isRecording) userDimmedScreen = false
+    }
+
     // Intercept hardware back button while recording is active.
     var showStopConfirmDialog by remember { mutableStateOf(false) }
     // Block back navigation while recording or while the session is being finalized.
@@ -99,7 +128,7 @@ fun MainScreen(
                 context, Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED)
         if (micGranted) {
-            viewModel.initialize()
+            viewModel.initialize(autoStartRecording = true)
         } else {
             viewModel.onMicPermissionDenied()
         }
@@ -122,7 +151,7 @@ fun MainScreen(
         }
 
         if (permissionsToRequest.isEmpty()) {
-            viewModel.initialize()
+            viewModel.initialize(autoStartRecording = true)
         } else {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
@@ -220,6 +249,21 @@ fun MainScreen(
                         }
                     },
                     actions = {
+                        // Screen-off toggle — only shown while recording so the user
+                        // can let the screen turn off without stopping the session.
+                        // Tapping again re-enables the wake lock instantly.
+                        if (uiState.isRecording) {
+                            IconButton(onClick = { userDimmedScreen = !userDimmedScreen }) {
+                                Icon(
+                                    imageVector = if (userDimmedScreen) AppIcons.LockOpen else AppIcons.Lock,
+                                    contentDescription = if (userDimmedScreen)
+                                        stringResource(R.string.screen_wake_enable)
+                                    else
+                                        stringResource(R.string.screen_wake_disable),
+                                    tint = Color.White.copy(alpha = if (userDimmedScreen) 0.5f else 1f)
+                                )
+                            }
+                        }
                         // Download progress indicator shown in top bar during model download
                         if (uiState.isDownloadingModel) {
                             Row(

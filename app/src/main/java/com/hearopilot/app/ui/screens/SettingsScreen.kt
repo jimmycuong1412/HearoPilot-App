@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hearopilot.app.ui.R
@@ -59,6 +60,8 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val isLlmDownloaded by viewModel.isLlmDownloaded.collectAsStateWithLifecycle()
     val llmDownloadState by viewModel.llmDownloadState.collectAsStateWithLifecycle()
+    val sttDownloadState by viewModel.sttDownloadState.collectAsStateWithLifecycle()
+    val activeSttDownloadLanguage by viewModel.activeSttDownloadLanguage.collectAsStateWithLifecycle()
     val activeDownloadVariant by viewModel.activeDownloadVariant.collectAsStateWithLifecycle()
     val recommendedVariant = viewModel.recommendedVariant
 
@@ -105,6 +108,9 @@ fun SettingsScreen(
                     isQ8Downloaded = viewModel.isVariantDownloaded(LlmModelVariant.Q8_0),
                     isIq4Downloaded = viewModel.isVariantDownloaded(LlmModelVariant.IQ4_NL),
                     isQwen35Downloaded = viewModel.isVariantDownloaded(LlmModelVariant.QWEN3_5_Q8_0),
+                    isGemma3_4bDownloaded = viewModel.isVariantDownloaded(LlmModelVariant.GEMMA3_4B_Q4),
+                    isQwen3_4bDownloaded = viewModel.isVariantDownloaded(LlmModelVariant.QWEN3_4B_Q4),
+                    isPhi4MiniDownloaded = viewModel.isVariantDownloaded(LlmModelVariant.PHI4_MINI_Q4),
                     activeDownloadVariant = activeDownloadVariant,
                     onVariantChange = { viewModel.updateLlmModelVariant(it) },
                     onDownloadVariant = { viewModel.downloadVariant(it) }
@@ -118,6 +124,16 @@ fun SettingsScreen(
                 LlmEnabledSetting(
                     enabled = settings.llmEnabled,
                     onEnabledChange = { viewModel.updateLlmEnabled(it) }
+                )
+            }
+
+            // STT Languages Section
+            SettingsSection(title = stringResource(R.string.settings_section_stt)) {
+                SttLanguagesSetting(
+                    activeSttDownloadLanguage = activeSttDownloadLanguage,
+                    sttDownloadState = sttDownloadState,
+                    isSttDownloaded = { viewModel.isSttDownloaded(it) },
+                    onStartDownload = { viewModel.startSttDownload(it) }
                 )
             }
 
@@ -379,6 +395,9 @@ private fun LlmModelVariantSetting(
     isQ8Downloaded: Boolean,
     isIq4Downloaded: Boolean,
     isQwen35Downloaded: Boolean,
+    isGemma3_4bDownloaded: Boolean,
+    isQwen3_4bDownloaded: Boolean,
+    isPhi4MiniDownloaded: Boolean,
     activeDownloadVariant: LlmModelVariant?,
     onVariantChange: (LlmModelVariant) -> Unit,
     onDownloadVariant: (LlmModelVariant) -> Unit
@@ -454,6 +473,45 @@ private fun LlmModelVariantSetting(
             description = stringResource(R.string.settings_llm_model_variant_qwen35_desc),
             onClick = { onVariantChange(LlmModelVariant.QWEN3_5_Q8_0) },
             onDownload = { onDownloadVariant(LlmModelVariant.QWEN3_5_Q8_0) }
+        )
+
+        // Gemma 3 4B Q4_K_M — flagship, best accuracy for Snapdragon 8 Gen 2/3
+        ModelVariantOption(
+            isSelected = currentVariant == LlmModelVariant.GEMMA3_4B_Q4,
+            isRecommended = false,
+            isDownloaded = isGemma3_4bDownloaded,
+            isDownloading = activeDownloadVariant == LlmModelVariant.GEMMA3_4B_Q4,
+            isBeta = true,
+            name = stringResource(R.string.settings_llm_model_variant_gemma3_4b_name),
+            description = stringResource(R.string.settings_llm_model_variant_gemma3_4b_desc),
+            onClick = { onVariantChange(LlmModelVariant.GEMMA3_4B_Q4) },
+            onDownload = { onDownloadVariant(LlmModelVariant.GEMMA3_4B_Q4) }
+        )
+
+        // Qwen 3 4B Q4_K_M — multilingual, 32K context
+        ModelVariantOption(
+            isSelected = currentVariant == LlmModelVariant.QWEN3_4B_Q4,
+            isRecommended = false,
+            isDownloaded = isQwen3_4bDownloaded,
+            isDownloading = activeDownloadVariant == LlmModelVariant.QWEN3_4B_Q4,
+            isBeta = true,
+            name = stringResource(R.string.settings_llm_model_variant_qwen3_4b_name),
+            description = stringResource(R.string.settings_llm_model_variant_qwen3_4b_desc),
+            onClick = { onVariantChange(LlmModelVariant.QWEN3_4B_Q4) },
+            onDownload = { onDownloadVariant(LlmModelVariant.QWEN3_4B_Q4) }
+        )
+
+        // Phi-4-mini Q4_K_M — low latency, strong instruction-following
+        ModelVariantOption(
+            isSelected = currentVariant == LlmModelVariant.PHI4_MINI_Q4,
+            isRecommended = false,
+            isDownloaded = isPhi4MiniDownloaded,
+            isDownloading = activeDownloadVariant == LlmModelVariant.PHI4_MINI_Q4,
+            isBeta = true,
+            name = stringResource(R.string.settings_llm_model_variant_phi4_mini_name),
+            description = stringResource(R.string.settings_llm_model_variant_phi4_mini_desc),
+            onClick = { onVariantChange(LlmModelVariant.PHI4_MINI_Q4) },
+            onDownload = { onDownloadVariant(LlmModelVariant.PHI4_MINI_Q4) }
         )
     }
 }
@@ -1632,6 +1690,133 @@ private fun TranslationLanguageSetting(
                             { Icon(AppIcons.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) }
                         } else null
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * List of available STT languages with download management.
+ */
+@Composable
+private fun SttLanguagesSetting(
+    activeSttDownloadLanguage: String?,
+    sttDownloadState: DownloadState,
+    isSttDownloaded: (String) -> Boolean,
+    onStartDownload: (String) -> Unit
+) {
+    val languages = com.hearopilot.app.domain.model.SupportedLanguages.ALL
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_stt_language_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        languages.forEach { lang ->
+            val downloaded = isSttDownloaded(lang.code)
+            val downloading = activeSttDownloadLanguage == lang.code && sttDownloadState is DownloadState.Downloading
+            val progress = if (sttDownloadState is DownloadState.Downloading && activeSttDownloadLanguage == lang.code) {
+                sttDownloadState.progress.percentage
+            } else 0
+
+            SttLanguageItem(
+                name = lang.nativeName,
+                englishName = lang.englishName,
+                isDownloaded = downloaded,
+                isDownloading = downloading,
+                progress = progress,
+                onDownload = { onStartDownload(lang.code) }
+            )
+        }
+    }
+}
+
+/**
+ * Individual STT language item with download status/action.
+ */
+@Composable
+private fun SttLanguageItem(
+    name: String,
+    englishName: String,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    progress: Int,
+    onDownload: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isDownloaded) {
+                        Surface(
+                            color = AccentSuccess.copy(alpha = 0.15f),
+                            shape = MaterialTheme.shapes.extraSmall
+                        ) {
+                            Text(
+                                text = stringResource(R.string.settings_stt_downloaded),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = AccentSuccess,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = englishName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (!isDownloaded) {
+                if (isDownloading) {
+                    Box(contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            progress = { progress / 100f },
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "$progress",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 8.sp
+                        )
+                    }
+                } else {
+                    IconButton(onClick = onDownload) {
+                        Icon(
+                            imageVector = AppIcons.Download,
+                            contentDescription = stringResource(R.string.settings_stt_download),
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

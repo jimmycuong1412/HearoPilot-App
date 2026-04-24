@@ -24,5 +24,23 @@ enum class LlmModelVariant {
      * Beta: experimental, available only via manual download in Settings.
      * Not recommended automatically by [com.hearopilot.app.data.device.DeviceTierDetector].
      */
-    QWEN3_5_Q8_0
+    QWEN3_5_Q8_0,
+
+    /**
+     * Gemma 3 4B Q4_K_M — ~2.5 GB, significantly better reasoning and analysis than 1B.
+     * Ideal for flagship devices with ≥ 12 GB RAM and Snapdragon 8 Gen 2/3.
+     */
+    GEMMA3_4B_Q4,
+
+    /**
+     * Qwen 3 4B Q4_K_M — ~2.5 GB, excellent multilingual summarization and reasoning.
+     * 32K context, strong instruction-following. Best for meeting analysis on high-end devices.
+     */
+    QWEN3_4B_Q4,
+
+    /**
+     * Phi-4-mini Q4_K_M — ~2.5 GB, Microsoft's efficiency-focused 4B model.
+     * Exceptional instruction-following with low inference latency for real-time insights.
+     */
+    PHI4_MINI_Q4
 }

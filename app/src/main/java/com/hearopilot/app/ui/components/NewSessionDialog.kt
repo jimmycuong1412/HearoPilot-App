@@ -13,6 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +50,7 @@ import com.hearopilot.app.ui.ui.theme.*
 @Composable
 fun NewSessionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String?, RecordingMode, String?, InsightStrategy, String?) -> Unit,
+    onConfirm: (String?, RecordingMode, String, String?, InsightStrategy, String?) -> Unit,
     settings: AppSettings = AppSettings()
 ) {
     val languages = com.hearopilot.app.domain.model.SupportedLanguages.ALL
@@ -62,6 +65,8 @@ fun NewSessionDialog(
     // Single combined input: used as both session name and topic
     var sessionTopic by remember { mutableStateOf("") }
     var selectedMode by remember { mutableStateOf(RecordingMode.SIMPLE_LISTENING) }
+    // Input language (what the user will speak)
+    var inputLanguage by remember { mutableStateOf(deviceLanguageCode) }
     // Always a valid BCP-47 code — device locale for analysis modes, translation target for translation mode.
     var outputLanguage by remember { mutableStateOf(deviceLanguageCode) }
     // Default strategy for the selected mode, updated when mode changes.
@@ -106,14 +111,14 @@ fun NewSessionDialog(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                         .background(BrandPurpleDark)
-                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(R.string.new_session_dialog_title),
                                 style = MaterialTheme.typography.titleLarge,
@@ -126,8 +131,32 @@ fun NewSessionDialog(
                                 color = Color.White.copy(alpha = 0.75f)
                             )
                         }
-                        IconButton(onClick = onDismiss) {
-                            Icon(AppIcons.Close, contentDescription = stringResource(R.string.cancel), tint = Color.White)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = {
+                                    val langArg = outputLanguage.ifEmpty { null }
+                                    val nameAndTopic = sessionTopic.trim().takeIf { it.isNotBlank() }
+                                    onConfirm(nameAndTopic, selectedMode, inputLanguage, langArg, insightStrategy, nameAndTopic)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = BrandPurpleDark
+                                ),
+                                shape = MaterialTheme.shapes.medium,
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.start),
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                            IconButton(onClick = onDismiss) {
+                                Icon(AppIcons.Close, contentDescription = stringResource(R.string.cancel), tint = Color.White)
+                            }
                         }
                     }
                 }
@@ -140,6 +169,15 @@ fun NewSessionDialog(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Input language selector — what language is being spoken
+                    LanguageSelector(
+                        label = stringResource(R.string.new_session_input_language_label),
+                        languages = languages,
+                        selectedCode = inputLanguage,
+                        showAutoOption = false,
+                        onLanguageSelected = { inputLanguage = it }
+                    )
+
                     // Language selector — shown first so the user picks the output language
                     // before choosing a mode. For REAL_TIME_TRANSLATION it is the translation
                     // target; for all other modes it selects which locale's system prompt is used.
@@ -208,22 +246,6 @@ fun NewSessionDialog(
                         )
                     }
 
-                    // Primary CTA
-                    com.hearopilot.app.ui.components.GradientButton(
-                        text = stringResource(R.string.start),
-                        onClick = {
-                            val langArg = outputLanguage.ifEmpty { null }
-                            val nameAndTopic = sessionTopic.trim().takeIf { it.isNotBlank() }
-                            onConfirm(
-                                nameAndTopic,
-                                selectedMode,
-                                langArg,
-                                insightStrategy,
-                                nameAndTopic
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         }
@@ -391,6 +413,8 @@ fun LanguageSelector(
     showAutoOption: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var buttonSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
 
     val autoLabel = stringResource(R.string.new_session_language_auto)
     val displayName = if (selectedCode.isEmpty()) autoLabel
@@ -402,10 +426,12 @@ fun LanguageSelector(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Box {
+        Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
                 onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { buttonSize = it.size },
                 shape = MaterialTheme.shapes.medium
             ) {
                 Text(displayName, modifier = Modifier.weight(1f))
@@ -418,7 +444,9 @@ fun LanguageSelector(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.heightIn(max = 320.dp)
+                modifier = Modifier
+                    .width(with(density) { buttonSize.width.toDp() })
+                    .heightIn(max = 320.dp)
             ) {
                 if (showAutoOption) {
                     DropdownMenuItem(

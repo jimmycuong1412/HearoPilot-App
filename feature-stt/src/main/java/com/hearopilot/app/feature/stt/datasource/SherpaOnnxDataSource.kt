@@ -23,22 +23,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import javax.inject.Provider
+
 /**
  * Sherpa-ONNX implementation of SttDataSource.
  *
  * Handles audio recording, VAD (Voice Activity Detection), and ASR (Automatic Speech Recognition).
- * Uses Provider (unscoped) so a fresh recognizer and VAD are created each time initialize()
- * is called, and releaseModel() can free the ~670 MB native heap between sessions.
  *
  * @property context Android context
- * @property recognizerProvider Factory for creating a new OfflineRecognizer instance
  * @property vadProvider Factory for creating a new Vad instance
  * @property audioManager System AudioManager used to activate Bluetooth SCO when available
  */
 class SherpaOnnxDataSource(
     private val context: Context,
-    private val recognizerProvider: javax.inject.Provider<OfflineRecognizer>,
-    private val vadProvider: javax.inject.Provider<Vad>,
+    private val vadProvider: Provider<Vad>,
     private val audioManager: AudioManager
 ) : SttDataSource {
 
@@ -56,7 +54,7 @@ class SherpaOnnxDataSource(
 
     // Lazily resolve the active instances; create via provider if not yet loaded.
     private val recognizer: OfflineRecognizer
-        get() = activeRecognizer ?: recognizerProvider.get().also { activeRecognizer = it }
+        get() = activeRecognizer ?: throw IllegalStateException("Recognizer not initialized. Call initialize() first.")
     private val vad: Vad
         get() = activeVad ?: vadProvider.get().also { activeVad = it }
 
@@ -192,14 +190,15 @@ class SherpaOnnxDataSource(
     private var metrics = AudioMetrics()
     private var recordingStartTimeMs = 0L
 
-    override suspend fun initialize(modelPath: String): Result<Unit> = runCatching {
+    override suspend fun initialize(modelPath: String, languageCode: String): Result<Unit> = runCatching {
         // Eagerly create recognizer and VAD so any model-not-found error surfaces here
         // rather than mid-recording. If instances are already loaded (re-use without release)
         // the lazy properties return the existing ones.
         // Must run on IO: recognizerProvider.get() loads ~670 MB ONNX model from disk and
         // would block the main thread otherwise (Choreographer: Skipped 228 frames).
         withContext(Dispatchers.IO) {
-            val r = recognizer  // triggers recognizerProvider.get() if not yet loaded
+            // Re-initialize recognizer if language changed or not yet loaded
+            val r = getOrReloadRecognizer(modelPath, languageCode)
             val v = vad         // triggers vadProvider.get() if not yet loaded
             // Drain any leftover segments from the previous session before resetting the
             // RNN hidden state. vad.reset() only resets the model state, NOT the segments
@@ -210,6 +209,46 @@ class SherpaOnnxDataSource(
             }
             v.reset()
         }
+    }
+
+    private var currentLanguage: String? = null
+    private var currentModelPath: String? = null
+
+    private fun getOrReloadRecognizer(modelPath: String, languageCode: String): OfflineRecognizer {
+        val existing = activeRecognizer
+        if (existing != null && currentLanguage == languageCode) {
+            return existing
+        }
+
+        // Release existing if language changed
+        existing?.release()
+        activeRecognizer = null
+
+        // Load new recognizer for the specified language
+        val config = com.hearopilot.app.data.config.modelConfigForLanguage(languageCode)
+        val offlineConfig = com.k2fsa.sherpa.onnx.getOfflineModelConfig(type = config.sttModelType)!!
+
+        // Map files based on config
+        val encoderFile = config.sttFiles.find { it.contains("encoder") }!!
+        val decoderFile = config.sttFiles.find { it.contains("decoder") }!!
+        val joinerFile = config.sttFiles.find { it.contains("joiner") }!!
+        val tokensFile = config.sttFiles.find { it.contains("tokens") }!!
+
+        offlineConfig.transducer.encoder = "$modelPath/$encoderFile"
+        offlineConfig.transducer.decoder = "$modelPath/$decoderFile"
+        offlineConfig.transducer.joiner = "$modelPath/$joinerFile"
+        offlineConfig.tokens = "$modelPath/$tokensFile"
+        offlineConfig.numThreads = 2
+
+        val recognizer = OfflineRecognizer(
+            assetManager = null,
+            config = com.k2fsa.sherpa.onnx.OfflineRecognizerConfig(modelConfig = offlineConfig)
+        )
+        
+        activeRecognizer = recognizer
+        currentLanguage = languageCode
+        currentModelPath = modelPath
+        return recognizer
     }
 
     @SuppressLint("MissingPermission")
@@ -236,7 +275,18 @@ class SherpaOnnxDataSource(
         // RNN hidden state. vad.reset() only resets the model state, NOT the segments
         // queue — unconsumed segments cause isSpeechDetected() to malfunction silently.
         withContext(Dispatchers.IO) {
-            recognizer // triggers recognizerProvider.get() if activeRecognizer is null
+            // Reload recognizer if it was released (e.g. after pause → releaseModel()).
+            // currentModelPath/currentLanguage are stored by initialize() and survive releaseModel(),
+            // so we can reconstruct the recognizer without requiring initialize() to be called again.
+            val path = currentModelPath
+            val lang = currentLanguage
+            if (activeRecognizer == null) {
+                if (path != null && lang != null) {
+                    getOrReloadRecognizer(path, lang)
+                } else {
+                    throw IllegalStateException("Recognizer not initialized. Call initialize() first.")
+                }
+            }
             val v = vad
             while (!v.empty()) {
                 v.pop()

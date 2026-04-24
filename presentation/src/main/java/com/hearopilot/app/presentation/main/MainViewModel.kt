@@ -113,7 +113,7 @@ class MainViewModel @Inject constructor(
     private var accumulatedDurationMs: Long = 0L
     private var isInitialized = false // Track if STT and LLM are already initialized
     private var currentRecordingMode: RecordingMode = RecordingMode.SHORT_MEETING
-    private var currentInputLanguage: String = "it"
+    private var currentInputLanguage: String = "en"
     private var currentOutputLanguage: String? = null
     private var currentInsightStrategy: InsightStrategy = InsightStrategy.REAL_TIME
     private var currentTopic: String? = null
@@ -188,10 +188,16 @@ class MainViewModel @Inject constructor(
      * If not downloaded, the user will be prompted in the AI Insights tab.
      *
      * Idempotent: safe to call multiple times, will skip if already initialized.
+     *
+     * @param autoStartRecording Whether to start recording automatically after successful initialization.
      */
-    fun initialize() {
+    fun initialize(autoStartRecording: Boolean = false) {
         if (isInitialized) {
             Log.i(TAG, "Already initialized, skipping")
+            // If already initialized but not recording, and auto-start was requested, start now.
+            if (autoStartRecording && !_uiState.value.isRecording) {
+                startStreaming()
+            }
             return
         }
 
@@ -207,9 +213,23 @@ class MainViewModel @Inject constructor(
             val settings = settingsRepository.getSettings().first()
             _uiState.update { it.copy(settings = settings) }
 
+            // Await the session config so currentInputLanguage is set before STT init.
+            // The init-block collector races with this coroutine; without this await,
+            // currentInputLanguage may still be "en" when getSttModelPath is called,
+            // causing the English model to load even when the session language is "vi".
+            transcriptionRepository.getSession(sessionId).first()?.let { session ->
+                currentRecordingMode = session.mode
+                currentInputLanguage = session.inputLanguage
+                currentOutputLanguage = session.outputLanguage
+                currentInsightStrategy = session.insightStrategy
+                currentTopic = session.topic
+            }
+
             // Initialize STT
-            if (settings.sttModelPath.isNotBlank()) {
-                startSttStreamingUseCase(settings.sttModelPath)
+            val sttModelPath = modelDownloadManager.getSttModelPath(currentInputLanguage)
+            if (sttModelPath != null) {
+                _uiState.update { it.copy(error = null) }
+                startSttStreamingUseCase(sttModelPath, currentInputLanguage)
                     .onFailure { e ->
                         Log.e(TAG, "STT initialization failed", e)
                         _uiState.update { it.copy(error = "STT init failed: ${e.message}") }
@@ -218,8 +238,9 @@ class MainViewModel @Inject constructor(
                         Log.i(TAG, "STT initialized successfully")
                     }
             } else {
-                Log.w(TAG, "STT model path not configured")
-                _uiState.update { it.copy(error = "STT model path not configured") }
+                Log.w(TAG, "STT model path not configured or model not downloaded for $currentInputLanguage")
+                val languageName = com.hearopilot.app.domain.model.SupportedLanguages.getByCode(currentInputLanguage)?.nativeName ?: currentInputLanguage
+                _uiState.update { it.copy(error = "Speech recognition model for $languageName is not ready. Please download it from Settings.") }
             }
 
             // Check if LLM is enabled by the user
@@ -299,6 +320,12 @@ class MainViewModel @Inject constructor(
             isInitialized = true
             _uiState.update { it.copy(isInitializing = false) }
             Log.i(TAG, "Initialization complete")
+
+            // Automatically start recording if requested
+            if (autoStartRecording) {
+                Log.i(TAG, "Auto-starting recording as requested")
+                startStreaming()
+            }
         }
     }
 
@@ -405,10 +432,10 @@ class MainViewModel @Inject constructor(
         conservativeThreadsApplied = false
 
         // Check if STT model is downloaded before starting
-        if (!modelDownloadManager.isSttModelDownloaded()) {
-            Log.e(TAG, "STT model not downloaded, cannot start recording")
+        if (!modelDownloadManager.isSttModelDownloaded(currentInputLanguage)) {
+            Log.e(TAG, "STT model ($currentInputLanguage) not downloaded, cannot start recording")
             _uiState.update {
-                it.copy(error = "Speech recognition model not downloaded. Please download it from Settings.")
+                it.copy(error = "Speech recognition model for the selected language is not downloaded. Please download it from Settings.")
             }
             return
         }

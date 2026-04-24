@@ -48,12 +48,17 @@ class SettingsViewModel @Inject constructor(
     val isLlmDownloaded: StateFlow<Boolean> = _isLlmDownloaded.asStateFlow()
 
     val llmDownloadState: StateFlow<DownloadState> = downloadStateManager.llmDownloadState
+    val sttDownloadState: StateFlow<DownloadState> = downloadStateManager.sttDownloadState
 
     // Tracks which variant is currently being downloaded so that llmModelPath is updated
     // to the correct file when the download completes, regardless of the selected variant.
     // Exposed to the UI so that only the downloading variant shows a spinner.
     private val _activeDownloadVariant = MutableStateFlow<LlmModelVariant?>(null)
     val activeDownloadVariant: StateFlow<LlmModelVariant?> = _activeDownloadVariant.asStateFlow()
+
+    // Tracks which STT language is currently being downloaded.
+    private val _activeSttDownloadLanguage = MutableStateFlow<String?>(null)
+    val activeSttDownloadLanguage: StateFlow<String?> = _activeSttDownloadLanguage.asStateFlow()
 
     /**
      * The model variant recommended for this specific device, computed once on first access.
@@ -130,6 +135,21 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Start STT model download for a specific [languageCode].
+     */
+    fun startSttDownload(languageCode: String) {
+        _activeSttDownloadLanguage.value = languageCode
+        androidDownloadManager.startSttDownload(languageCode)
+    }
+
+    /**
+     * Check if STT model is downloaded for a specific [languageCode].
+     */
+    fun isSttDownloaded(languageCode: String): Boolean {
+        return modelDownloadManager.isSttModelDownloaded(languageCode)
     }
 
     /**

@@ -63,6 +63,7 @@
     <string name="new_session_name_label">Give this transcription a name (optional)</string>
     <string name="new_session_name_hint">e.g. Meeting Notes</string>
     <string name="new_session_name_tip">💡 You can leave it blank and we\'ll use the date/time instead.</string>
+    <string name="new_session_input_language_label">Input Language (You speak)</string>
     <string name="new_session_recording_type">Recording Type</string>
     <string name="recording_type_short">Short Recording</string>
     <string name="recording_type_short_desc">≤10 min - Frequent insights</string>
@@ -165,6 +166,11 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
+    <string name="settings_section_stt">Speech Recognition Languages</string>
+    <string name="settings_stt_language_desc">Download additional languages for offline transcription.</string>
+    <string name="settings_stt_downloaded">Downloaded</string>
+    <string name="settings_stt_download">Download</string>
+    <string name="settings_stt_downloading">Downloading %1$d%%</string>
     <string name="settings_section_short">Short Recordings (≤10 min)</string>
     <string name="settings_section_long">Long Recordings (up to 3h)</string>
     <string name="settings_section_ai">AI Assistant Configuration</string>
@@ -251,8 +257,8 @@
     <string name="history_insight_confirm_title">Generate AI Insight</string>
     <string name="history_insight_confirm_message">A new copy of this session will be created with an AI-generated analysis of all transcript segments.</string>
     <string name="history_insight_no_content">Not enough transcript content to generate an insight.</string>
-    <!-- Suffix appended to the copy session name, e.g. "My Meeting (AI Analysis)" -->
-    <string name="history_insight_copy_suffix">(AI Analysis)</string>
+    <!-- Suffix appended to the copy session name, e.g. "My Meeting (AI Analysis at 2026-04-23 12:05:30)" -->
+    <string name="history_insight_copy_suffix_format">(AI Analysis at %s)</string>
     <string name="segments_count">segments</string>
     <string name="insights_count">insights</string>
     <string name="back">Back</string>
@@ -400,6 +406,7 @@
     <string name="onboarding_stt_model_name">Sherpa-ONNX Parakeet</string>
     <string name="onboarding_stt_download_button">Download Model</string>
     <string name="onboarding_stt_note">This model is essential for the app to function.</string>
+    <string name="onboarding_language_label">Language:</string>
 
     <!-- Onboarding - Supported Languages -->
     <string name="onboarding_languages_title">Supported Languages</string>
@@ -484,4 +491,12 @@
     <string name="settings_llm_advanced_section_desc">Experimental models for advanced users. Performance may vary from standard models.</string>
     <string name="settings_llm_model_variant_qwen35_name">Qwen 3.5 0.8B (Q8)</string>
     <string name="settings_llm_model_variant_qwen35_desc">Alternative architecture · Experimental</string>
+    <string name="settings_llm_model_variant_gemma3_4b_name">Gemma 3 4B (Q4) · ~2.5 GB</string>
+    <string name="settings_llm_model_variant_gemma3_4b_desc">Best accuracy · Snapdragon 8 Gen 2/3 · 12 GB+ RAM</string>
+    <string name="settings_llm_model_variant_qwen3_4b_name">Qwen 3 4B (Q4) · ~2.5 GB</string>
+    <string name="settings_llm_model_variant_qwen3_4b_desc">Strong multilingual analysis · 32K context</string>
+    <string name="settings_llm_model_variant_phi4_mini_name">Phi-4-mini (Q4) · ~2.5 GB</string>
+    <string name="settings_llm_model_variant_phi4_mini_desc">Fast inference · Microsoft · Low latency insights</string>
+    <string name="screen_wake_disable">Allow screen to turn off</string>
+    <string name="screen_wake_enable">Keep screen on</string>
 </resources>

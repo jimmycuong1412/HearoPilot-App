@@ -13,7 +13,8 @@ data class ModelConfig(
     val llmUrl: String,
     val llmFilename: String,
     val sttBaseUrl: String,
-    val sttFiles: List<String>
+    val sttFiles: List<String>,
+    val sttModelType: Int = 40 // Default to English Parakeet
 )
 
 // STT config is shared across all LLM variants.
@@ -23,6 +24,16 @@ private val STT_FILES = listOf(
     "encoder.int8.onnx",
     "decoder.int8.onnx",
     "joiner.int8.onnx",
+    "tokens.txt"
+)
+
+// Vietnamese STT config (Type 26)
+private const val STT_VI_BASE_URL =
+    "https://huggingface.co/csukuangfj/sherpa-onnx-zipformer-vi-int8-2025-04-20/resolve/main"
+private val STT_VI_FILES = listOf(
+    "encoder-epoch-12-avg-8.int8.onnx",
+    "decoder-epoch-12-avg-8.onnx",
+    "joiner-epoch-12-avg-8.int8.onnx",
     "tokens.txt"
 )
 
@@ -43,7 +54,22 @@ object DefaultModelConfig {
         llmUrl = LLM_URL,
         llmFilename = LLM_FILENAME,
         sttBaseUrl = STT_BASE_URL,
-        sttFiles = STT_FILES
+        sttFiles = STT_FILES,
+        sttModelType = 40
+    )
+}
+
+/**
+ * Vietnamese STT configuration — specialized model for Vietnamese speech.
+ * Uses Zipformer architecture (Type 26).
+ */
+object VietnameseSttConfig {
+    val INSTANCE = ModelConfig(
+        llmUrl = DefaultModelConfig.INSTANCE.llmUrl,
+        llmFilename = DefaultModelConfig.INSTANCE.llmFilename,
+        sttBaseUrl = STT_VI_BASE_URL,
+        sttFiles = STT_VI_FILES,
+        sttModelType = 26
     )
 }
 
@@ -64,7 +90,8 @@ object LowEndModelConfig {
         llmUrl = LLM_URL,
         llmFilename = LLM_FILENAME,
         sttBaseUrl = STT_BASE_URL,
-        sttFiles = STT_FILES
+        sttFiles = STT_FILES,
+        sttModelType = 40
     )
 }
 
@@ -85,7 +112,62 @@ object Qwen35ModelConfig {
         llmUrl = LLM_URL,
         llmFilename = LLM_FILENAME,
         sttBaseUrl = STT_BASE_URL,
-        sttFiles = STT_FILES
+        sttFiles = STT_FILES,
+        sttModelType = 40
+    )
+}
+
+/**
+ * Gemma 3 4B Q4_K_M — ~2.5 GB, best accuracy/size balance for flagship devices.
+ * Recommended for Snapdragon 8 Gen 2/3 with ≥ 12 GB RAM.
+ */
+object Gemma3_4B_Q4Config {
+    private const val LLM_URL =
+        "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf?download=true"
+    private const val LLM_FILENAME = "gemma-3-4b-it-Q4_K_M.gguf"
+
+    val INSTANCE = ModelConfig(
+        llmUrl = LLM_URL,
+        llmFilename = LLM_FILENAME,
+        sttBaseUrl = STT_BASE_URL,
+        sttFiles = STT_FILES,
+        sttModelType = 40
+    )
+}
+
+/**
+ * Qwen 3 4B Q4_K_M — ~2.5 GB, strong multilingual summarization and 32K context.
+ * Excellent for meeting transcription analysis on high-end devices.
+ */
+object Qwen3_4B_Q4Config {
+    private const val LLM_URL =
+        "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true"
+    private const val LLM_FILENAME = "Qwen3-4B-Q4_K_M.gguf"
+
+    val INSTANCE = ModelConfig(
+        llmUrl = LLM_URL,
+        llmFilename = LLM_FILENAME,
+        sttBaseUrl = STT_BASE_URL,
+        sttFiles = STT_FILES,
+        sttModelType = 40
+    )
+}
+
+/**
+ * Phi-4-mini Q4_K_M — ~2.5 GB, Microsoft's efficiency-optimized 4B model.
+ * Low inference latency with high instruction-following quality.
+ */
+object Phi4MiniQ4Config {
+    private const val LLM_URL =
+        "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf?download=true"
+    private const val LLM_FILENAME = "Phi-4-mini-instruct-Q4_K_M.gguf"
+
+    val INSTANCE = ModelConfig(
+        llmUrl = LLM_URL,
+        llmFilename = LLM_FILENAME,
+        sttBaseUrl = STT_BASE_URL,
+        sttFiles = STT_FILES,
+        sttModelType = 40
     )
 }
 
@@ -94,4 +176,13 @@ fun modelConfigForVariant(variant: LlmModelVariant): ModelConfig = when (variant
     LlmModelVariant.Q8_0         -> DefaultModelConfig.INSTANCE
     LlmModelVariant.IQ4_NL       -> LowEndModelConfig.INSTANCE
     LlmModelVariant.QWEN3_5_Q8_0 -> Qwen35ModelConfig.INSTANCE
+    LlmModelVariant.GEMMA3_4B_Q4 -> Gemma3_4B_Q4Config.INSTANCE
+    LlmModelVariant.QWEN3_4B_Q4  -> Qwen3_4B_Q4Config.INSTANCE
+    LlmModelVariant.PHI4_MINI_Q4 -> Phi4MiniQ4Config.INSTANCE
+}
+
+/** Returns the [ModelConfig] for a specific language. */
+fun modelConfigForLanguage(languageCode: String): ModelConfig = when {
+    languageCode.startsWith("vi") -> VietnameseSttConfig.INSTANCE
+    else -> DefaultModelConfig.INSTANCE
 }
