@@ -4,6 +4,7 @@ import com.hearopilot.app.domain.model.AppSettings
 import com.hearopilot.app.domain.model.BatchInsightProgress
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.LlmInsight
+import com.hearopilot.app.domain.model.RecordingMode
 import com.hearopilot.app.domain.model.TranscriptionSegment
 
 /**
@@ -23,13 +24,16 @@ import com.hearopilot.app.domain.model.TranscriptionSegment
  * @property downloadProgress Download progress percentage (0-100)
  * @property insightStrategy The insight generation strategy for the current session
  * @property batchProgress Progress state of the end-of-session batch pipeline
+ * @property recordingMode The active recording mode for the current session
  */
 data class MainUiState(
     val isRecording: Boolean = false,
     val isFinalizingSession: Boolean = false,
     val insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
     val batchProgress: BatchInsightProgress = BatchInsightProgress.Idle,
+    val recordingMode: RecordingMode = RecordingMode.SHORT_MEETING,
     val isInitializing: Boolean = true,
+    val isInitializingLlm: Boolean = false,
     val isMicPermissionDenied: Boolean = false,
     val completedSegments: List<TranscriptionSegment> = emptyList(),
     val currentPartialSegment: TranscriptionSegment? = null,
@@ -42,7 +46,8 @@ data class MainUiState(
     val downloadProgress: Int = 0,
     val downloadSpeedMbps: Float = 0f,
     val downloadEtaSeconds: Int = 0,
-    val recordingDurationMillis: Long = 0
+    val recordingDurationMillis: Long = 0,
+    val regeneratingInsightId: String? = null
 ) {
     /**
      * Returns all segments for display: completed + current partial (if exists).

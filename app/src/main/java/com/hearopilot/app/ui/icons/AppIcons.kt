@@ -79,7 +79,20 @@ object AppIcons {
     val ModeShortMeeting: ImageVector get() = Icons.Outlined.Description
     val ModeLongMeeting: ImageVector get() = Icons.Outlined.Article
     val ModeTranslation: ImageVector get() = Icons.Outlined.Translate
+    val ModeInterview: ImageVector get() = Icons.Outlined.Psychology
 
     // Insight strategy
     val Summarize: ImageVector get() = Icons.Outlined.Summarize
+
+    // Clipboard
+    val ContentCopy: ImageVector get() = Icons.Outlined.ContentCopy
+
+    // Task tracking
+    val CheckBox: ImageVector get() = Icons.Outlined.CheckBox
+    val CheckBoxOutlineBlank: ImageVector get() = Icons.Outlined.CheckBoxOutlineBlank
+    val TaskAlt: ImageVector get() = Icons.Outlined.TaskAlt
+
+    // Speaker labeling
+    val Person: ImageVector get() = Icons.Outlined.Person
+    val Bookmark: ImageVector get() = Icons.Outlined.Bookmark
 }

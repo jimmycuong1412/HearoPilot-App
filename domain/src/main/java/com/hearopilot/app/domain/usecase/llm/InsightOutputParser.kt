@@ -46,7 +46,7 @@ object InsightOutputParser {
                     ParsedInsight(title = "Summary", content = cleaned, tasks = null)
                 }
             }
-            RecordingMode.SHORT_MEETING, RecordingMode.LONG_MEETING -> {
+            RecordingMode.SHORT_MEETING, RecordingMode.LONG_MEETING, RecordingMode.INTERVIEW -> {
                 try {
                     val title = extractJsonField(cleaned, settings.jsonFieldTitle)
                         ?: extractJsonField(cleaned, "title")

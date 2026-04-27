@@ -1,9 +1,11 @@
 ﻿package com.hearopilot.app.data.repository
 
+import com.hearopilot.app.data.database.dao.ActionItemDao
 import com.hearopilot.app.data.database.dao.LlmInsightDao
 import com.hearopilot.app.data.database.dao.SearchDao
 import com.hearopilot.app.data.database.dao.TranscriptionSegmentDao
 import com.hearopilot.app.data.database.dao.TranscriptionSessionDao
+import com.hearopilot.app.data.database.entity.ActionItemEntity
 import com.hearopilot.app.data.database.mapper.toDomain
 import com.hearopilot.app.data.database.mapper.toEntity
 import com.hearopilot.app.domain.model.InsightStrategy
@@ -39,7 +41,8 @@ class TranscriptionRepositoryImpl @Inject constructor(
     private val sessionDao: TranscriptionSessionDao,
     private val segmentDao: TranscriptionSegmentDao,
     private val insightDao: LlmInsightDao,
-    private val searchDao: SearchDao
+    private val searchDao: SearchDao,
+    private val actionItemDao: ActionItemDao
 ) : TranscriptionRepository {
 
     // ========== Session Management ==========
@@ -167,6 +170,15 @@ class TranscriptionRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateSegmentSpeaker(segmentId: String, speaker: String?): Result<Unit> {
+        return try {
+            segmentDao.updateSpeaker(segmentId, speaker)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override fun getSegmentsBySession(sessionId: String): Flow<List<TranscriptionSegment>> {
         return segmentDao.getSegmentsBySession(sessionId)
             .map { entities -> entities.map { it.toDomain() } }
@@ -179,12 +191,52 @@ class TranscriptionRepositoryImpl @Inject constructor(
             // Save the insight
             insightDao.insert(insight.toEntity())
 
+            // Sync action items from insight tasks JSON
+            syncActionItemsFromInsight(insight)
+
             // Update session's lastModifiedAt
             updateSessionModifiedTime(insight.sessionId)
 
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Parses the tasks JSON from an insight and upserts an [ActionItemEntity] for each task.
+     * Existing action items for this insight are replaced (via REPLACE conflict strategy).
+     *
+     * Supports two JSON formats:
+     *   - String array: ["task 1", "task 2"]
+     *   - Object array: [{"description": "task 1"}, ...]
+     */
+    private suspend fun syncActionItemsFromInsight(insight: LlmInsight) {
+        val tasksJson = insight.tasks ?: return
+        try {
+            // Delete old items for this insight before re-syncing (handles edit/overwrite)
+            actionItemDao.deleteByInsight(insight.id)
+
+            val array = org.json.JSONArray(tasksJson)
+            for (i in 0 until array.length()) {
+                val text = when (val item = array.get(i)) {
+                    is org.json.JSONObject -> item.optString("description", "")
+                    else -> item.toString()
+                }.trim()
+                if (text.isBlank()) continue
+                actionItemDao.insert(
+                    ActionItemEntity(
+                        id = "${insight.id}_$i",
+                        sessionId = insight.sessionId,
+                        insightId = insight.id,
+                        text = text,
+                        isDone = false,
+                        createdAt = insight.timestamp
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            // Non-fatal: tasks JSON malformed, skip sync
         }
     }
 
@@ -234,8 +286,9 @@ class TranscriptionRepositoryImpl @Inject constructor(
         return combine(
             searchDao.searchSegments(query),
             searchDao.searchInsights(query),
-            searchDao.searchSessionNames(query)
-        ) { segments, insights, sessionNames ->
+            searchDao.searchSessionNames(query),
+            searchDao.searchActionItems(query)
+        ) { segments, insights, sessionNames, actionItems ->
             val results = mutableListOf<SearchResult>()
 
             segments.forEach { row ->
@@ -273,6 +326,19 @@ class TranscriptionRepositoryImpl @Inject constructor(
                     snippet = row.sessionName ?: "",
                     matchQuery = query,
                     matchSource = SearchMatchSource.SESSION_NAME
+                )
+            }
+
+            actionItems.forEach { row ->
+                results += SearchResult(
+                    sessionId = row.sessionId,
+                    sessionName = row.sessionName,
+                    mode = runCatching { RecordingMode.valueOf(row.mode) }.getOrDefault(RecordingMode.SIMPLE_LISTENING),
+                    createdAt = row.createdAt,
+                    snippet = extractSnippet(row.snippetText, query),
+                    matchQuery = query,
+                    matchSource = SearchMatchSource.ACTION_ITEM,
+                    highlightId = row.id
                 )
             }
 

@@ -17,5 +17,6 @@ data class TranscriptionSegment(
     val sessionId: String,
     val text: String,
     val timestamp: Long,
-    val isComplete: Boolean
+    val isComplete: Boolean,
+    val speaker: String? = null  // Optional manual speaker label (e.g. "Me", "Person A")
 )

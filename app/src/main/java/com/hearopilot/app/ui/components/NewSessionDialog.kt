@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +30,7 @@ import com.hearopilot.app.ui.R
 import com.hearopilot.app.domain.model.AppSettings
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.RecordingMode
+import com.hearopilot.app.domain.model.SessionTemplate
 import com.hearopilot.app.ui.icons.AppIcons
 import com.hearopilot.app.ui.ui.theme.*
 
@@ -53,7 +56,10 @@ import com.hearopilot.app.ui.ui.theme.*
 fun NewSessionDialog(
     onDismiss: () -> Unit,
     onConfirm: (String?, RecordingMode, String, String?, InsightStrategy, String?) -> Unit,
-    settings: AppSettings = AppSettings()
+    onSaveTemplate: ((String, RecordingMode, String, String?, InsightStrategy, String?) -> Unit)? = null,
+    onDeleteTemplate: ((String) -> Unit)? = null,
+    settings: AppSettings = AppSettings(),
+    templates: List<SessionTemplate> = emptyList()
 ) {
     val languages = com.hearopilot.app.domain.model.SupportedLanguages.ALL
     val supportedCodes = remember { languages.map { it.code }.toSet() }
@@ -67,6 +73,8 @@ fun NewSessionDialog(
     // Single combined input: used as both session name and topic
     var sessionTopic by remember { mutableStateOf("") }
     var selectedMode by remember { mutableStateOf(RecordingMode.SIMPLE_LISTENING) }
+    // Interview role — used as the topic when INTERVIEW mode is selected
+    var interviewRole by remember { mutableStateOf("Developer") }
     // Input language (what the user will speak)
     var inputLanguage by remember { mutableStateOf(deviceLanguageCode) }
     // Always a valid BCP-47 code — device locale for analysis modes, translation target for translation mode.
@@ -75,6 +83,10 @@ fun NewSessionDialog(
     var insightStrategy by remember {
         mutableStateOf(settings.simpleListeningDefaultStrategy)
     }
+
+    // Template save dialog state
+    var showSaveTemplateDialog by remember { mutableStateOf(false) }
+    var templateName by remember { mutableStateOf("") }
 
     // When mode changes: update language default and strategy default.
     LaunchedEffect(selectedMode) {
@@ -88,8 +100,13 @@ fun NewSessionDialog(
             RecordingMode.SHORT_MEETING         -> settings.shortMeetingDefaultStrategy
             RecordingMode.LONG_MEETING          -> settings.longMeetingDefaultStrategy
             RecordingMode.REAL_TIME_TRANSLATION -> settings.translationDefaultStrategy
+            RecordingMode.INTERVIEW             -> settings.interviewDefaultStrategy
         }
     }
+
+    // For INTERVIEW mode, role is the effective topic; otherwise use the text field value.
+    val effectiveTopic = if (selectedMode == RecordingMode.INTERVIEW) interviewRole
+                         else sessionTopic.trim().takeIf { it.isNotBlank() }
 
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.88f
 
@@ -151,8 +168,7 @@ fun NewSessionDialog(
                             Button(
                                 onClick = {
                                     val langArg = outputLanguage.ifEmpty { null }
-                                    val nameAndTopic = sessionTopic.trim().takeIf { it.isNotBlank() }
-                                    onConfirm(nameAndTopic, selectedMode, inputLanguage, langArg, insightStrategy, nameAndTopic)
+                                    onConfirm(effectiveTopic, selectedMode, inputLanguage, langArg, insightStrategy, effectiveTopic)
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White,
@@ -176,6 +192,11 @@ fun NewSessionDialog(
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
+                            if (onSaveTemplate != null) {
+                                IconButton(onClick = { showSaveTemplateDialog = true }) {
+                                    Icon(AppIcons.Bookmark, contentDescription = stringResource(R.string.templates_save), tint = Color.White)
+                                }
+                            }
                             IconButton(onClick = onDismiss) {
                                 Icon(AppIcons.Close, contentDescription = stringResource(R.string.cancel), tint = Color.White)
                             }
@@ -191,6 +212,39 @@ fun NewSessionDialog(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Templates row — quick-pick presets
+                    if (templates.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = stringResource(R.string.templates_title),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(horizontal = 0.dp)
+                            ) {
+                                items(templates, key = { it.id }) { template ->
+                                    TemplateChip(
+                                        template = template,
+                                        onClick = {
+                                            selectedMode = template.mode
+                                            inputLanguage = template.inputLanguage
+                                            outputLanguage = template.outputLanguage ?: deviceLanguageCode
+                                            insightStrategy = template.insightStrategy
+                                            if (template.mode == RecordingMode.INTERVIEW) {
+                                                interviewRole = template.topic ?: "Developer"
+                                            } else {
+                                                sessionTopic = template.topic ?: ""
+                                            }
+                                        },
+                                        onDelete = { onDeleteTemplate?.invoke(template.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Input language selector — what language is being spoken
                     LanguageSelector(
                         label = stringResource(R.string.new_session_input_language_label),
@@ -247,6 +301,7 @@ fun NewSessionDialog(
                                         RecordingMode.SHORT_MEETING         -> "${settings.shortMeetingIntervalSeconds}s"
                                         RecordingMode.LONG_MEETING          -> "${settings.longMeetingIntervalMinutes}min"
                                         RecordingMode.REAL_TIME_TRANSLATION -> "${settings.translationIntervalSeconds}s"
+                                        RecordingMode.INTERVIEW             -> "${settings.interviewIntervalSeconds}s"
                                     }
                                 }
                             } else null
@@ -260,6 +315,14 @@ fun NewSessionDialog(
                         }
                     }
 
+                    // Interview role selector — shown only in INTERVIEW mode
+                    if (selectedMode == RecordingMode.INTERVIEW) {
+                        InterviewRoleSelector(
+                            selectedRole = interviewRole,
+                            onRoleSelected = { interviewRole = it }
+                        )
+                    }
+
                     // Insight strategy selector — shown only when LLM is enabled.
                     if (settings.llmEnabled) {
                         InsightStrategySelector(
@@ -270,6 +333,99 @@ fun NewSessionDialog(
 
                 }
             }
+        }
+    }
+
+    // Save-template name dialog
+    if (showSaveTemplateDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveTemplateDialog = false },
+            title = { Text(stringResource(R.string.templates_save)) },
+            text = {
+                OutlinedTextField(
+                    value = templateName,
+                    onValueChange = { templateName = it },
+                    label = { Text(stringResource(R.string.templates_save_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (templateName.isNotBlank()) {
+                            val langArg = outputLanguage.ifEmpty { null }
+                            onSaveTemplate?.invoke(templateName.trim(), selectedMode, inputLanguage, langArg, insightStrategy, effectiveTopic)
+                            templateName = ""
+                            showSaveTemplateDialog = false
+                        }
+                    }
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveTemplateDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Chip displaying a saved session template. Tap to apply, long-press shows delete.
+ */
+@Composable
+private fun TemplateChip(
+    template: SessionTemplate,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteMenu by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(20.dp),
+            color = BrandPurple.copy(alpha = 0.10f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, BrandPurple.copy(alpha = 0.3f)),
+            modifier = Modifier.clickable(onClickLabel = stringResource(R.string.use_template)) {
+                onClick()
+            }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    AppIcons.Bookmark,
+                    contentDescription = null,
+                    tint = BrandPurple,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = template.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = BrandPurple
+                )
+                // Delete button inside chip
+                IconButton(
+                    onClick = { showDeleteMenu = true },
+                    modifier = Modifier.size(16.dp)
+                ) {
+                    Icon(
+                        AppIcons.Close,
+                        contentDescription = stringResource(R.string.delete),
+                        tint = BrandPurple.copy(alpha = 0.6f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
+        DropdownMenu(expanded = showDeleteMenu, onDismissRequest = { showDeleteMenu = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                onClick = { onDelete(); showDeleteMenu = false }
+            )
         }
     }
 }
@@ -290,6 +446,7 @@ private fun ModeCard(
         RecordingMode.SHORT_MEETING         -> ModeShortMeetingTint
         RecordingMode.LONG_MEETING          -> ModeAmberTint
         RecordingMode.REAL_TIME_TRANSLATION -> ModeEmeraldTint
+        RecordingMode.INTERVIEW             -> ModeInterviewTint
     }
     val borderColor = if (isSelected) accentColor else MaterialTheme.colorScheme.outlineVariant
     val bgColor = if (isSelected) accentColor.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
@@ -299,6 +456,7 @@ private fun ModeCard(
         RecordingMode.SHORT_MEETING         -> AppIcons.ModeShortMeeting
         RecordingMode.LONG_MEETING          -> AppIcons.ModeLongMeeting
         RecordingMode.REAL_TIME_TRANSLATION -> AppIcons.ModeTranslation
+        RecordingMode.INTERVIEW             -> AppIcons.ModeInterview
     }
 
     Row(
@@ -342,6 +500,7 @@ private fun ModeCard(
                     RecordingMode.SHORT_MEETING         -> stringResource(R.string.mode_short_meeting)
                     RecordingMode.LONG_MEETING          -> stringResource(R.string.mode_long_meeting)
                     RecordingMode.REAL_TIME_TRANSLATION -> stringResource(R.string.mode_translation_live)
+                    RecordingMode.INTERVIEW             -> stringResource(R.string.mode_interview)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
@@ -353,6 +512,7 @@ private fun ModeCard(
                     RecordingMode.SHORT_MEETING         -> stringResource(R.string.mode_short_meeting_desc)
                     RecordingMode.LONG_MEETING          -> stringResource(R.string.mode_long_meeting_desc)
                     RecordingMode.REAL_TIME_TRANSLATION -> stringResource(R.string.mode_translation_desc)
+                    RecordingMode.INTERVIEW             -> stringResource(R.string.mode_interview_desc)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -422,6 +582,74 @@ private fun InsightStrategySelector(
                     Icon(AppIcons.Summarize, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             )
+        }
+    }
+}
+
+/**
+ * Dropdown selector for the interview target role.
+ * The selected role is injected as `{role}` into the interview system prompt.
+ */
+@Composable
+private fun InterviewRoleSelector(
+    selectedRole: String,
+    onRoleSelected: (String) -> Unit
+) {
+    val roles = listOf(
+        stringResource(R.string.interview_role_developer),
+        stringResource(R.string.interview_role_devops),
+        stringResource(R.string.interview_role_tester),
+        stringResource(R.string.interview_role_product_manager),
+        stringResource(R.string.interview_role_designer),
+        stringResource(R.string.interview_role_data_scientist),
+        stringResource(R.string.interview_role_other)
+    )
+    var expanded by remember { mutableStateOf(false) }
+    var buttonSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(R.string.interview_role_label),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { buttonSize = it.size },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(selectedRole, modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = AppIcons.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(with(density) { buttonSize.width.toDp() })
+            ) {
+                roles.forEachIndexed { index, role ->
+                    DropdownMenuItem(
+                        text = { Text(role) },
+                        onClick = { onRoleSelected(role); expanded = false },
+                        leadingIcon = if (role == selectedRole) {
+                            { Icon(AppIcons.CheckCircle, null, modifier = Modifier.size(16.dp)) }
+                        } else null
+                    )
+                    if (index < roles.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
         }
     }
 }

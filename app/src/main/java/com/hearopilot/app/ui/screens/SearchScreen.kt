@@ -115,7 +115,11 @@ fun SearchScreen(
                             SearchResultCard(
                                 result = result,
                                 onClick = {
-                                    val tab = if (result.matchSource == SearchMatchSource.INSIGHT) 1 else 0
+                                    val tab = when (result.matchSource) {
+                                        SearchMatchSource.INSIGHT,
+                                        SearchMatchSource.ACTION_ITEM -> 1
+                                        else -> 0
+                                    }
                                     onNavigateToSession(result.sessionId, result.highlightId, tab)
                                 }
                             )
@@ -263,6 +267,7 @@ private fun SearchMatchSource.label(): String = when (this) {
     SearchMatchSource.TRANSCRIPTION -> stringResource(R.string.search_source_transcription)
     SearchMatchSource.INSIGHT -> stringResource(R.string.search_source_insight)
     SearchMatchSource.SESSION_NAME -> stringResource(R.string.search_source_session_name)
+    SearchMatchSource.ACTION_ITEM -> stringResource(R.string.search_source_action_item)
 }
 
 @Composable
@@ -271,6 +276,7 @@ private fun RecordingMode.label(): String = when (this) {
     RecordingMode.SHORT_MEETING -> stringResource(R.string.mode_short_meeting)
     RecordingMode.LONG_MEETING -> stringResource(R.string.mode_long_meeting)
     RecordingMode.REAL_TIME_TRANSLATION -> stringResource(R.string.mode_translation_live)
+    RecordingMode.INTERVIEW -> stringResource(R.string.mode_interview)
 }
 
 private fun RecordingMode.accentColor(): Color = when (this) {
@@ -278,6 +284,7 @@ private fun RecordingMode.accentColor(): Color = when (this) {
     RecordingMode.SHORT_MEETING -> BrandPrimary
     RecordingMode.LONG_MEETING -> ModeAmberTint
     RecordingMode.REAL_TIME_TRANSLATION -> ModeEmeraldTint
+    RecordingMode.INTERVIEW -> ModeInterviewTint
 }
 
 @Composable

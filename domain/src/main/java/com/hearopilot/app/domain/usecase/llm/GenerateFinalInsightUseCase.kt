@@ -38,6 +38,8 @@ class GenerateFinalInsightUseCase(
         private const val MAX_TOKENS_SHORT     = 600
         private const val MAX_TOKENS_LONG      = 768
         private const val MAX_TOKENS_TRANSLATE = 256
+        // Interview uses the richer dual-output schema; match LONG_MEETING budget.
+        private const val MAX_TOKENS_INTERVIEW = 768
 
         // Maximum characters in the user prompt sent to the LLM.
         // Keeps the total prompt within typical on-device model context windows (4k–8k tokens).
@@ -75,11 +77,22 @@ class GenerateFinalInsightUseCase(
         return try {
             val settings = settingsRepository.getSettings().first()
             val systemPrompt = buildSystemPrompt(mode, settings, outputLanguage, topic)
-            // Cap to the most recent content so the prompt fits within the model's
-            // context window even for very long sessions (e.g. 30-min recordings).
-            val userPrompt = pendingText.trim().takeLast(MAX_USER_PROMPT_CHARS)
             val maxTokens = maxTokensForMode(mode)
             val insightTimestamp = System.currentTimeMillis()
+
+            // Interview Mode uses a dedicated prompt builder; all other modes cap
+            // the raw text and send it to the generic user-prompt format.
+            val interviewRole = if (mode == RecordingMode.INTERVIEW) {
+                topic?.takeIf { it.isNotBlank() } ?: "Software Engineer"
+            } else null
+
+            val userPrompt = if (mode == RecordingMode.INTERVIEW && interviewRole != null) {
+                InterviewPromptBuilder.build(interviewRole, pendingText.trim())
+            } else {
+                // Cap to the most recent content so the prompt fits within the model's
+                // context window even for very long sessions (e.g. 30-min recordings).
+                pendingText.trim().takeLast(MAX_USER_PROMPT_CHARS)
+            }
 
             // When an explicit output language is set, override the json field names
             // with the locale-specific names from that language's prompt schema.
@@ -109,8 +122,17 @@ class GenerateFinalInsightUseCase(
                 return Result.success(null)
             }
 
-            val parsed = InsightOutputParser.parse(rawOutput, mode, parseSettings)
-            Result.success(
+            // Route parsing: Interview Mode → dual-output parser, all others → generic parser.
+            val insight = if (mode == RecordingMode.INTERVIEW && interviewRole != null) {
+                val interviewInsight = InterviewOutputParser.parse(rawOutput, interviewRole)
+                InterviewOutputParser.toLlmInsight(
+                    interviewInsight = interviewInsight,
+                    sessionId = sessionId,
+                    timestamp = insightTimestamp,
+                    sourceSegmentIds = emptyList()
+                )
+            } else {
+                val parsed = InsightOutputParser.parse(rawOutput, mode, parseSettings)
                 LlmInsight(
                     id = UUID.randomUUID().toString(),
                     sessionId = sessionId,
@@ -118,9 +140,11 @@ class GenerateFinalInsightUseCase(
                     content = parsed.content,
                     tasks = parsed.tasks,
                     timestamp = insightTimestamp,
-                    sourceSegmentIds = emptyList() // Final insight has no specific source IDs
+                    sourceSegmentIds = emptyList()
                 )
-            )
+            }
+
+            Result.success(insight)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -140,6 +164,16 @@ class GenerateFinalInsightUseCase(
                 val englishName = SupportedLanguages.getByCode(code)?.englishName ?: code
                 settings.translationSystemPrompt.replace("{target_language}", englishName)
             }
+            RecordingMode.INTERVIEW -> {
+                val role = if (!topic.isNullOrBlank()) topic else "Software Engineer"
+                val storedPrompt = settings.interviewSystemPrompt
+                val defaultPrompt = settingsRepository.getDefaultPromptForMode(mode)
+                val template = if (storedPrompt != defaultPrompt) storedPrompt
+                               else if (!targetLangCode.isNullOrEmpty())
+                                   resourceProvider.getPromptForMode(mode, targetLangCode)
+                               else storedPrompt
+                template.replace("{role}", role)
+            }
             else -> {
                 val storedPrompt = when (mode) {
                     RecordingMode.SIMPLE_LISTENING -> settings.simpleListeningSystemPrompt
@@ -156,6 +190,7 @@ class GenerateFinalInsightUseCase(
                 }
             }
         }
+        if (mode == RecordingMode.INTERVIEW) return basePrompt
         return if (!topic.isNullOrBlank()) {
             val localeCode = if (!targetLangCode.isNullOrEmpty()) targetLangCode else "en"
             val prefix = resourceProvider.getTopicPrefix(localeCode).format(topic)
@@ -170,5 +205,6 @@ class GenerateFinalInsightUseCase(
         RecordingMode.SHORT_MEETING         -> MAX_TOKENS_SHORT
         RecordingMode.LONG_MEETING          -> MAX_TOKENS_LONG
         RecordingMode.REAL_TIME_TRANSLATION -> MAX_TOKENS_TRANSLATE
+        RecordingMode.INTERVIEW             -> MAX_TOKENS_INTERVIEW
     }
 }

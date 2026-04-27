@@ -52,9 +52,14 @@ const val TAG = "sherpa-onnx-sim-asr"
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        const val ACTION_QUICK_START = "com.hearopilot.app.ACTION_QUICK_START"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val isQuickStart = intent?.action == ACTION_QUICK_START
         setContent {
             // Read theme mode from settings
             val settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -86,7 +91,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LibellulaApp()
+                    LibellulaApp(quickStart = isQuickStart)
                 }
             }
         }
@@ -107,7 +112,7 @@ class MainActivity : ComponentActivity() {
  * 5. Settings screen (configuration)
  */
 @Composable
-fun LibellulaApp() {
+fun LibellulaApp(quickStart: Boolean = false) {
     val navController = rememberNavController()
     val setupViewModel: SetupViewModel = hiltViewModel()
 
@@ -176,7 +181,8 @@ fun LibellulaApp() {
                 },
                 onNavigateToSearch = {
                     navController.navigate("search")
-                }
+                },
+                quickStart = quickStart
             )
         }
 

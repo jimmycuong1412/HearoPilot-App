@@ -334,6 +334,16 @@ class GenerateBatchInsightUseCase(
                 val englishName = SupportedLanguages.getByCode(code)?.englishName ?: code
                 settings.translationSystemPrompt.replace("{target_language}", englishName)
             }
+            RecordingMode.INTERVIEW -> {
+                val role = if (!topic.isNullOrBlank()) topic else "Software Engineer"
+                val storedPrompt = settings.interviewSystemPrompt
+                val defaultPrompt = settingsRepository.getDefaultPromptForMode(mode)
+                val template = if (storedPrompt != defaultPrompt) storedPrompt
+                               else if (!outputLanguage.isNullOrEmpty())
+                                   resourceProvider.getPromptForMode(mode, outputLanguage)
+                               else storedPrompt
+                template.replace("{role}", role)
+            }
             else -> {
                 val storedPrompt = when (mode) {
                     RecordingMode.SIMPLE_LISTENING -> settings.simpleListeningSystemPrompt
@@ -350,6 +360,8 @@ class GenerateBatchInsightUseCase(
                 }
             }
         }
+        // For INTERVIEW the role is baked into the prompt; skip the generic topic prefix.
+        if (mode == RecordingMode.INTERVIEW) return base
         return prependTopic(base, topic, outputLanguage)
     }
 

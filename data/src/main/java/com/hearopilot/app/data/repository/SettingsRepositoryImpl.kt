@@ -14,11 +14,14 @@ import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.LlmModelVariant
 import com.hearopilot.app.domain.model.LlmSamplerConfig
 import com.hearopilot.app.domain.model.RecordingMode
+import com.hearopilot.app.domain.model.SessionTemplate
 import com.hearopilot.app.domain.model.ThemeMode
 import com.hearopilot.app.domain.provider.ResourceProvider
 import com.hearopilot.app.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_settings")
@@ -40,12 +43,14 @@ class SettingsRepositoryImpl @Inject constructor(
         val SHORT_MEETING_INTERVAL = intPreferencesKey("short_meeting_interval_seconds")
         val LONG_MEETING_INTERVAL = intPreferencesKey("long_meeting_interval_minutes")
         val TRANSLATION_INTERVAL = intPreferencesKey("translation_interval_seconds")
+        val INTERVIEW_INTERVAL = intPreferencesKey("interview_interval_seconds")
 
         // Mode-specific system prompts
         val SIMPLE_LISTENING_PROMPT = stringPreferencesKey("simple_listening_system_prompt")
         val SHORT_MEETING_PROMPT = stringPreferencesKey("short_meeting_system_prompt")
         val LONG_MEETING_PROMPT = stringPreferencesKey("long_meeting_system_prompt")
         val TRANSLATION_PROMPT = stringPreferencesKey("translation_system_prompt")
+        val INTERVIEW_PROMPT = stringPreferencesKey("interview_system_prompt")
 
         // Translation settings
         val TRANSLATION_TARGET_LANGUAGE = stringPreferencesKey("translation_target_language")
@@ -66,6 +71,7 @@ class SettingsRepositoryImpl @Inject constructor(
         val SHORT_MEETING_DEFAULT_STRATEGY = stringPreferencesKey("short_meeting_default_strategy")
         val LONG_MEETING_DEFAULT_STRATEGY = stringPreferencesKey("long_meeting_default_strategy")
         val TRANSLATION_DEFAULT_STRATEGY = stringPreferencesKey("translation_default_strategy")
+        val INTERVIEW_DEFAULT_STRATEGY = stringPreferencesKey("interview_default_strategy")
 
         // LLM model variant selection (Q8_0 / IQ4_NL)
         val LLM_MODEL_VARIANT = stringPreferencesKey("llm_model_variant")
@@ -79,6 +85,9 @@ class SettingsRepositoryImpl @Inject constructor(
 
         // One-time UI hints
         val HAS_SHOWN_HISTORY_INSIGHT_COACHMARK = booleanPreferencesKey("has_shown_history_insight_coachmark")
+
+        // Session templates (stored as JSON array string)
+        val SESSION_TEMPLATES = stringPreferencesKey("session_templates")
     }
 
     override fun getSettings(): Flow<AppSettings> {
@@ -99,6 +108,8 @@ class SettingsRepositoryImpl @Inject constructor(
                 },
                 translationIntervalSeconds = preferences[Keys.TRANSLATION_INTERVAL]
                     ?: defaults.translationIntervalSeconds,
+                interviewIntervalSeconds = preferences[Keys.INTERVIEW_INTERVAL]
+                    ?: defaults.interviewIntervalSeconds,
 
                 // Mode-specific system prompts (load from localized resources)
                 simpleListeningSystemPrompt = preferences[Keys.SIMPLE_LISTENING_PROMPT]
@@ -109,6 +120,8 @@ class SettingsRepositoryImpl @Inject constructor(
                     ?: resourceProvider.getLongMeetingPrompt(),
                 translationSystemPrompt = preferences[Keys.TRANSLATION_PROMPT]
                     ?: resourceProvider.getTranslationPrompt(),
+                interviewSystemPrompt = preferences[Keys.INTERVIEW_PROMPT]
+                    ?: resourceProvider.getInterviewPrompt(),
 
                 // Translation settings
                 translationTargetLanguage = preferences[Keys.TRANSLATION_TARGET_LANGUAGE]
@@ -171,6 +184,10 @@ class SettingsRepositoryImpl @Inject constructor(
                 translationDefaultStrategy = parseStrategy(
                     preferences[Keys.TRANSLATION_DEFAULT_STRATEGY],
                     InsightStrategy.REAL_TIME
+                ),
+                interviewDefaultStrategy = parseStrategy(
+                    preferences[Keys.INTERVIEW_DEFAULT_STRATEGY],
+                    InsightStrategy.REAL_TIME
                 )
             )
         }
@@ -191,12 +208,14 @@ class SettingsRepositoryImpl @Inject constructor(
             preferences[Keys.SHORT_MEETING_INTERVAL] = settings.shortMeetingIntervalSeconds
             preferences[Keys.LONG_MEETING_INTERVAL] = settings.longMeetingIntervalMinutes
             preferences[Keys.TRANSLATION_INTERVAL] = settings.translationIntervalSeconds
+            preferences[Keys.INTERVIEW_INTERVAL] = settings.interviewIntervalSeconds
 
             // Mode-specific system prompts
             preferences[Keys.SIMPLE_LISTENING_PROMPT] = settings.simpleListeningSystemPrompt
             preferences[Keys.SHORT_MEETING_PROMPT] = settings.shortMeetingSystemPrompt
             preferences[Keys.LONG_MEETING_PROMPT] = settings.longMeetingSystemPrompt
             preferences[Keys.TRANSLATION_PROMPT] = settings.translationSystemPrompt
+            preferences[Keys.INTERVIEW_PROMPT] = settings.interviewSystemPrompt
 
             // Translation settings
             preferences[Keys.TRANSLATION_TARGET_LANGUAGE] = settings.translationTargetLanguage
@@ -231,6 +250,7 @@ class SettingsRepositoryImpl @Inject constructor(
             preferences[Keys.SHORT_MEETING_DEFAULT_STRATEGY] = settings.shortMeetingDefaultStrategy.name
             preferences[Keys.LONG_MEETING_DEFAULT_STRATEGY] = settings.longMeetingDefaultStrategy.name
             preferences[Keys.TRANSLATION_DEFAULT_STRATEGY] = settings.translationDefaultStrategy.name
+            preferences[Keys.INTERVIEW_DEFAULT_STRATEGY] = settings.interviewDefaultStrategy.name
         }
     }
 
@@ -249,5 +269,69 @@ class SettingsRepositoryImpl @Inject constructor(
         RecordingMode.SHORT_MEETING         -> resourceProvider.getShortMeetingPrompt()
         RecordingMode.LONG_MEETING          -> resourceProvider.getLongMeetingPrompt()
         RecordingMode.REAL_TIME_TRANSLATION -> resourceProvider.getTranslationPrompt()
+        RecordingMode.INTERVIEW             -> resourceProvider.getInterviewPrompt()
+    }
+
+    // ========== Session Templates ==========
+
+    override fun getTemplates(): Flow<List<SessionTemplate>> =
+        context.dataStore.data.map { prefs ->
+            parseTemplatesJson(prefs[Keys.SESSION_TEMPLATES] ?: "[]")
+        }
+
+    override suspend fun saveTemplate(template: SessionTemplate) {
+        context.dataStore.edit { prefs ->
+            val current = parseTemplatesJson(prefs[Keys.SESSION_TEMPLATES] ?: "[]").toMutableList()
+            current.add(template)
+            prefs[Keys.SESSION_TEMPLATES] = serializeTemplates(current)
+        }
+    }
+
+    override suspend fun deleteTemplate(templateId: String) {
+        context.dataStore.edit { prefs ->
+            val current = parseTemplatesJson(prefs[Keys.SESSION_TEMPLATES] ?: "[]")
+                .filter { it.id != templateId }
+            prefs[Keys.SESSION_TEMPLATES] = serializeTemplates(current)
+        }
+    }
+
+    private fun serializeTemplates(templates: List<SessionTemplate>): String {
+        val arr = JSONArray()
+        templates.forEach { t ->
+            arr.put(JSONObject().apply {
+                put("id", t.id)
+                put("name", t.name)
+                put("mode", t.mode.name)
+                put("inputLanguage", t.inputLanguage)
+                put("outputLanguage", t.outputLanguage ?: JSONObject.NULL)
+                put("insightStrategy", t.insightStrategy.name)
+                put("topic", t.topic ?: JSONObject.NULL)
+                put("createdAt", t.createdAt)
+            })
+        }
+        return arr.toString()
+    }
+
+    private fun parseTemplatesJson(json: String): List<SessionTemplate> {
+        return try {
+            val arr = JSONArray(json)
+            (0 until arr.length()).mapNotNull { i ->
+                try {
+                    val obj = arr.getJSONObject(i)
+                    SessionTemplate(
+                        id = obj.getString("id"),
+                        name = obj.getString("name"),
+                        mode = RecordingMode.valueOf(obj.getString("mode")),
+                        inputLanguage = obj.getString("inputLanguage"),
+                        outputLanguage = obj.optString("outputLanguage").takeIf { it.isNotEmpty() && it != "null" },
+                        insightStrategy = InsightStrategy.valueOf(obj.getString("insightStrategy")),
+                        topic = obj.optString("topic").takeIf { it.isNotEmpty() && it != "null" },
+                        createdAt = obj.getLong("createdAt")
+                    )
+                } catch (_: Exception) { null }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 }

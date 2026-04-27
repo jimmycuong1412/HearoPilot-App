@@ -2,6 +2,7 @@ package com.hearopilot.app.ui.screens
 
 import android.content.Intent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -15,6 +16,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.hearopilot.app.ui.icons.AppIcons
 import androidx.compose.material3.*
@@ -43,6 +47,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hearopilot.app.ui.R
 import com.hearopilot.app.ui.ui.theme.*
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.hearopilot.app.domain.model.ActionItem
 import com.hearopilot.app.domain.model.BatchInsightProgress
 import com.hearopilot.app.domain.model.LlmInsight
 import com.hearopilot.app.domain.model.SessionWithDetails
@@ -173,24 +180,52 @@ fun SessionDetailsScreen(
                                 }
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                val textContent = viewModel.exportAsText()
-                                val exportTitle = context.getString(R.string.export_transcription)
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, textContent)
-                                    putExtra(Intent.EXTRA_TITLE, exportTitle)
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, exportTitle))
-                            },
-                            enabled = !actionsBlocked
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.Share,
-                                contentDescription = stringResource(R.string.export),
-                                tint = Color.White
-                            )
+                        // Share dropdown — Transcript or Summary
+                        Box {
+                            var showShareMenu by remember { mutableStateOf(false) }
+                            IconButton(
+                                onClick = { showShareMenu = true },
+                                enabled = !actionsBlocked
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.Share,
+                                    contentDescription = stringResource(R.string.export),
+                                    tint = Color.White
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showShareMenu,
+                                onDismissRequest = { showShareMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.share_transcript)) },
+                                    onClick = {
+                                        showShareMenu = false
+                                        val textContent = viewModel.exportAsText()
+                                        val exportTitle = context.getString(R.string.export_transcription)
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, textContent)
+                                            putExtra(Intent.EXTRA_TITLE, exportTitle)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, exportTitle))
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.share_summary)) },
+                                    onClick = {
+                                        showShareMenu = false
+                                        val summary = viewModel.exportAsSummaryMarkdown()
+                                        val exportTitle = context.getString(R.string.share_summary)
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, summary)
+                                            putExtra(Intent.EXTRA_TITLE, exportTitle)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, exportTitle))
+                                    }
+                                )
+                            }
                         }
                         IconButton(
                             onClick = { viewModel.showDeleteConfirmation() },
@@ -239,10 +274,21 @@ fun SessionDetailsScreen(
                         historyInsightProgress = uiState.historyInsightProgress,
                         intermediateHistoryInsights = uiState.intermediateHistoryInsights,
                         finalHistoryInsight = uiState.finalHistoryInsight,
+                        actionItems = uiState.actionItems,
                         onCancelGeneration = { viewModel.cancelHistoryInsight() },
                         onEditSegment = { viewModel.showEditSegmentDialog(it) },
+                        onAssignSpeaker = { viewModel.showSpeakerAssignment(it.id) },
                         onEditInsight = { viewModel.showEditInsightFullDialog(it) },
-                        onRename = { viewModel.showRenameDialog() }
+                        onRegenerate = { insight ->
+                            viewModel.regenerateInsight(
+                                insight.id,
+                                context.getString(R.string.llm_model_not_downloaded_error)
+                            )
+                        },
+                        regeneratingInsightId = uiState.regeneratingInsightId,
+                        onRename = { viewModel.showRenameDialog() },
+                        onToggleTask = { id, done -> viewModel.toggleActionItem(id, done) },
+                        onDeleteTask = { viewModel.deleteActionItem(it) }
                     )
                 }
             }
@@ -289,6 +335,18 @@ fun SessionDetailsScreen(
             )
         }
 
+        // Speaker assignment bottom sheet
+        uiState.speakerAssignmentSegmentId?.let { segId ->
+            // Find the segment to show its current speaker
+            val currentSpeaker = uiState.sessionDetails?.segments
+                ?.firstOrNull { it.id == segId }?.speaker
+            SpeakerAssignmentSheet(
+                currentSpeaker = currentSpeaker,
+                onDismiss = { viewModel.hideSpeakerAssignment() },
+                onSelect = { speaker -> viewModel.setSpeaker(segId, speaker) }
+            )
+        }
+
         // Confirm before starting history insight generation
         if (uiState.showHistoryInsightConfirm) {
             val originalName = uiState.sessionDetails?.session?.name
@@ -323,10 +381,16 @@ private fun SessionDetailsContent(
     historyInsightProgress: BatchInsightProgress,
     intermediateHistoryInsights: List<LlmInsight>,
     finalHistoryInsight: LlmInsight?,
+    actionItems: List<ActionItem>,
     onCancelGeneration: () -> Unit,
     onEditSegment: (TranscriptionSegment) -> Unit,
+    onAssignSpeaker: (TranscriptionSegment) -> Unit,
     onEditInsight: (LlmInsight) -> Unit,
-    onRename: () -> Unit
+    onRegenerate: ((LlmInsight) -> Unit)? = null,
+    regeneratingInsightId: String? = null,
+    onRename: () -> Unit,
+    onToggleTask: (String, Boolean) -> Unit,
+    onDeleteTask: (String) -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(initialTab) }
 
@@ -334,9 +398,12 @@ private fun SessionDetailsContent(
     LaunchedEffect(isGeneratingHistoryInsight) {
         if (isGeneratingHistoryInsight) selectedTab = 1
     }
+    val pendingCount = actionItems.count { !it.isDone }
     val tabTitles = listOf(
         stringResource(R.string.tab_transcript),
-        stringResource(R.string.tab_insights)
+        stringResource(R.string.tab_insights),
+        if (pendingCount > 0) stringResource(R.string.tab_tasks_badge, pendingCount)
+        else stringResource(R.string.tab_tasks)
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -366,7 +433,8 @@ private fun SessionDetailsContent(
             0 -> TranscriptTab(
                 segments = details.segments,
                 highlightId = highlightId,
-                onEditSegment = onEditSegment
+                onEditSegment = onEditSegment,
+                onAssignSpeaker = onAssignSpeaker
             )
             1 -> AiInsightsTab(
                 dbInsights = details.insights,
@@ -378,7 +446,14 @@ private fun SessionDetailsContent(
                 finalInsight = finalHistoryInsight,
                 highlightId = highlightId,
                 onCancel = onCancelGeneration,
-                onEditInsight = onEditInsight
+                onEditInsight = onEditInsight,
+                onRegenerate = onRegenerate,
+                regeneratingInsightId = regeneratingInsightId
+            )
+            2 -> TasksTab(
+                actionItems = actionItems,
+                onToggle = onToggleTask,
+                onDelete = onDeleteTask
             )
         }
     }
@@ -472,7 +547,8 @@ private fun SessionStatChip(
 private fun TranscriptTab(
     segments: List<TranscriptionSegment>,
     highlightId: String?,
-    onEditSegment: (TranscriptionSegment) -> Unit
+    onEditSegment: (TranscriptionSegment) -> Unit,
+    onAssignSpeaker: (TranscriptionSegment) -> Unit
 ) {
     val sortedSegments = remember(segments) { segments.sortedBy { it.timestamp } }
     val listState = rememberLazyListState()
@@ -512,7 +588,11 @@ private fun TranscriptTab(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(sortedSegments, key = { it.id }) { segment ->
-                TranscriptionSegmentCard(segment = segment, onEdit = { onEditSegment(segment) })
+                TranscriptionSegmentCard(
+                    segment = segment,
+                    onEdit = { onEditSegment(segment) },
+                    onAssignSpeaker = { onAssignSpeaker(segment) }
+                )
             }
         }
     }
@@ -541,7 +621,9 @@ private fun AiInsightsTab(
     finalInsight: LlmInsight?,
     highlightId: String?,
     onCancel: () -> Unit,
-    onEditInsight: (LlmInsight) -> Unit
+    onEditInsight: (LlmInsight) -> Unit,
+    onRegenerate: ((LlmInsight) -> Unit)? = null,
+    regeneratingInsightId: String? = null
 ) {
     if (isGenerating) {
         GeneratingInsightsView(
@@ -557,7 +639,9 @@ private fun AiInsightsTab(
             segments = segments,
             insightStrategy = insightStrategy,
             highlightId = highlightId,
-            onEditInsight = onEditInsight
+            onEditInsight = onEditInsight,
+            onRegenerate = onRegenerate,
+            regeneratingInsightId = regeneratingInsightId
         )
     }
 }
@@ -571,7 +655,9 @@ private fun StaticInsightsView(
     segments: List<TranscriptionSegment>,
     insightStrategy: com.hearopilot.app.domain.model.InsightStrategy,
     highlightId: String?,
-    onEditInsight: (LlmInsight) -> Unit
+    onEditInsight: (LlmInsight) -> Unit,
+    onRegenerate: ((LlmInsight) -> Unit)? = null,
+    regeneratingInsightId: String? = null
 ) {
     if (dbInsights.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -637,7 +723,9 @@ private fun StaticInsightsView(
                 insight = insight,
                 segments = segments,
                 isFinal = true,
-                onEditInsight = { onEditInsight(insight) }
+                onEditInsight = { onEditInsight(insight) },
+                onRegenerate = onRegenerate?.let { { it(insight) } },
+                isRegenerating = regeneratingInsightId == insight.id
             )
         }
         // Intermediate (chunk) insights or all real-time insights below.
@@ -646,7 +734,9 @@ private fun StaticInsightsView(
                 insight = insight,
                 segments = segments,
                 isFinal = false,
-                onEditInsight = { onEditInsight(insight) }
+                onEditInsight = { onEditInsight(insight) },
+                onRegenerate = onRegenerate?.let { { it(insight) } },
+                isRegenerating = regeneratingInsightId == insight.id
             )
         }
     }
@@ -803,6 +893,157 @@ private fun GenerationProgressBanner(
     }
 }
 
+// ─── Tasks tab ───────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun TasksTab(
+    actionItems: List<ActionItem>,
+    onToggle: (String, Boolean) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    if (actionItems.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    AppIcons.TaskAlt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(48.dp)
+                )
+                Text(
+                    stringResource(R.string.tasks_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    val pending = actionItems.filter { !it.isDone }
+    val done = actionItems.filter { it.isDone }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (pending.isNotEmpty()) {
+            stickyHeader {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    Text(
+                        text = stringResource(R.string.tasks_pending, pending.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            }
+            items(pending, key = { it.id }) { item ->
+                TaskItem(item = item, onToggle = onToggle, onDelete = onDelete)
+            }
+        }
+        if (done.isNotEmpty()) {
+            stickyHeader {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    Text(
+                        text = stringResource(R.string.tasks_completed, done.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp, horizontal = 0.dp)
+                            .padding(top = if (pending.isNotEmpty()) 12.dp else 4.dp)
+                    )
+                }
+            }
+            items(done, key = { it.id }) { item ->
+                TaskItem(item = item, onToggle = onToggle, onDelete = onDelete)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskItem(
+    item: ActionItem,
+    onToggle: (String, Boolean) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete(item.id)
+                true
+            } else false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    AppIcons.Delete,
+                    contentDescription = stringResource(R.string.delete),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+            }
+        }
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = if (item.isDone)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface,
+            tonalElevation = if (item.isDone) 0.dp else 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle(item.id, !item.isDone) }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = if (item.isDone) AppIcons.CheckBox else AppIcons.CheckBoxOutlineBlank,
+                    contentDescription = null,
+                    tint = if (item.isDone) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = item.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (item.isDone)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    else
+                        MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
 // ─── Insight card ─────────────────────────────────────────────────────────────
 
 /**
@@ -817,7 +1058,9 @@ private fun InsightCard(
     insight: LlmInsight,
     segments: List<TranscriptionSegment>,
     isFinal: Boolean,
-    onEditInsight: (() -> Unit)? = null
+    onEditInsight: (() -> Unit)? = null,
+    onRegenerate: (() -> Unit)? = null,
+    isRegenerating: Boolean = false
 ) {
     var isExpanded by remember { mutableStateOf(isFinal) }
 
@@ -891,6 +1134,56 @@ private fun InsightCard(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Copy insight to clipboard
+                    val clipboardManager = LocalClipboardManager.current
+                    val actionItemsLabel = stringResource(R.string.action_items)
+                    IconButton(onClick = {
+                        val summary = parseInsightDisplayContent(insight.content)
+                        val tasks = insight.tasks?.let { parseTasks(it) } ?: emptyList()
+                        val sb = StringBuilder()
+                        insight.title?.let { sb.appendLine(it).appendLine() }
+                        sb.append(summary)
+                        if (tasks.isNotEmpty()) {
+                            sb.appendLine().appendLine()
+                            sb.appendLine(actionItemsLabel)
+                            tasks.forEach { sb.appendLine("• $it") }
+                        }
+                        clipboardManager.setText(AnnotatedString(sb.toString().trim()))
+                    }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            AppIcons.ContentCopy,
+                            contentDescription = stringResource(R.string.copy),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    // Regenerate button — re-runs AI on source segments
+                    if (onRegenerate != null) {
+                        if (isRegenerating) {
+                            Box(
+                                modifier = Modifier.size(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = onRegenerate,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    AppIcons.Refresh,
+                                    contentDescription = stringResource(R.string.regenerate_insight),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                     // Single edit button opens a unified dialog for title, content, and tasks.
                     if (onEditInsight != null) {
                         IconButton(onClick = onEditInsight, modifier = Modifier.size(32.dp)) {
@@ -1075,38 +1368,68 @@ private fun SourceSegmentsSection(
 @Composable
 private fun TranscriptionSegmentCard(
     segment: TranscriptionSegment,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onAssignSpeaker: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
+        val speakerLabel = segment.speaker
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // Left accent bar — purple if unassigned, speaker-color tinted if assigned
             Box(
                 modifier = Modifier
                     .width(3.dp)
                     .fillMaxHeight()
-                    .background(BrandPrimary.copy(alpha = 0.45f))
+                    .background(
+                        if (speakerLabel != null) speakerColor(speakerLabel).copy(alpha = 0.8f)
+                        else BrandPrimary.copy(alpha = 0.45f)
+                    )
             )
-            Column(modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
+            Column(modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = formatTimestamp(segment.timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            AppIcons.Edit,
-                            contentDescription = stringResource(R.string.edit_item),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = formatTimestamp(segment.timestamp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
+                        // Speaker chip — tap to change, shown when assigned
+                        if (speakerLabel != null) {
+                            SpeakerChip(
+                                speaker = speakerLabel,
+                                onClick = onAssignSpeaker
+                            )
+                        }
+                    }
+                    Row {
+                        // Speaker assign button (person icon)
+                        IconButton(onClick = onAssignSpeaker, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                AppIcons.Person,
+                                contentDescription = stringResource(R.string.assign_speaker),
+                                tint = if (speakerLabel != null) speakerColor(speakerLabel)
+                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                AppIcons.Edit,
+                                contentDescription = stringResource(R.string.edit_item),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -1116,6 +1439,129 @@ private fun TranscriptionSegmentCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+    }
+}
+
+/** Compact chip showing the speaker name. Tapping re-opens the assignment sheet. */
+@Composable
+private fun SpeakerChip(speaker: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = speakerColor(speaker).copy(alpha = 0.15f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.height(20.dp)
+    ) {
+        Text(
+            text = speaker,
+            style = MaterialTheme.typography.labelSmall,
+            color = speakerColor(speaker),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+    }
+}
+
+/** Returns a deterministic color for a speaker label. */
+@Composable
+private fun speakerColor(speaker: String): Color {
+    val palette = listOf(
+        MaterialTheme.colorScheme.primary,
+        Color(0xFF2196F3),  // blue
+        Color(0xFF4CAF50),  // green
+        Color(0xFFFF9800),  // orange
+        Color(0xFF9C27B0),  // purple
+        Color(0xFFF44336),  // red
+    )
+    val index = (speaker.hashCode() and 0x7FFFFFFF) % palette.size
+    return palette[index]
+}
+
+/** Bottom-sheet dialog for assigning a speaker to a segment. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SpeakerAssignmentSheet(
+    currentSpeaker: String?,
+    onDismiss: () -> Unit,
+    onSelect: (String?) -> Unit
+) {
+    val speakers = listOf(
+        stringResource(R.string.speaker_me),
+        stringResource(R.string.speaker_person_a),
+        stringResource(R.string.speaker_person_b),
+        stringResource(R.string.speaker_person_c),
+        stringResource(R.string.speaker_person_d)
+    )
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.assign_speaker),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            speakers.forEach { speaker ->
+                val isSelected = speaker == currentSpeaker
+                ListItem(
+                    headlineContent = { Text(speaker) },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .background(speakerColor(speaker), RoundedCornerShape(8.dp))
+                        )
+                    },
+                    trailingContent = {
+                        if (isSelected) {
+                            Icon(
+                                AppIcons.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = if (isSelected)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        else Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSelect(speaker) }
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // Clear label option
+            ListItem(
+                headlineContent = {
+                    Text(
+                        stringResource(R.string.speaker_clear),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        AppIcons.Close,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSelect(null) }
+            )
         }
     }
 }

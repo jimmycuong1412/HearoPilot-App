@@ -3,11 +3,14 @@
 import android.content.Context
 import androidx.room.Room
 import com.hearopilot.app.data.database.AppDatabase
+import com.hearopilot.app.data.database.dao.ActionItemDao
 import com.hearopilot.app.data.database.dao.LlmInsightDao
 import com.hearopilot.app.data.database.dao.SearchDao
 import com.hearopilot.app.data.database.dao.TranscriptionSegmentDao
 import com.hearopilot.app.data.database.dao.TranscriptionSessionDao
+import com.hearopilot.app.data.repository.ActionItemRepositoryImpl
 import com.hearopilot.app.data.repository.TranscriptionRepositoryImpl
+import com.hearopilot.app.domain.repository.ActionItemRepository
 import com.hearopilot.app.domain.repository.TranscriptionRepository
 import dagger.Module
 import dagger.Provides
@@ -46,7 +49,9 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_2_3,
                 AppDatabase.MIGRATION_3_4,
                 AppDatabase.MIGRATION_4_5,
-                AppDatabase.MIGRATION_5_6
+                AppDatabase.MIGRATION_5_6,
+                AppDatabase.MIGRATION_6_7,
+                AppDatabase.MIGRATION_7_8
             )
             .build()
     }
@@ -89,17 +94,31 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideActionItemDao(database: AppDatabase): ActionItemDao {
+        return database.actionItemDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideActionItemRepository(dao: ActionItemDao): ActionItemRepository {
+        return ActionItemRepositoryImpl(dao)
+    }
+
+    @Provides
+    @Singleton
     fun provideTranscriptionRepository(
         sessionDao: TranscriptionSessionDao,
         segmentDao: TranscriptionSegmentDao,
         insightDao: LlmInsightDao,
-        searchDao: SearchDao
+        searchDao: SearchDao,
+        actionItemDao: ActionItemDao
     ): TranscriptionRepository {
         return TranscriptionRepositoryImpl(
             sessionDao = sessionDao,
             segmentDao = segmentDao,
             insightDao = insightDao,
-            searchDao = searchDao
+            searchDao = searchDao,
+            actionItemDao = actionItemDao
         )
     }
 }

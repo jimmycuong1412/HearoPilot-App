@@ -4,6 +4,8 @@ import com.hearopilot.app.domain.model.AppSettings
 import com.hearopilot.app.domain.model.LlmInsight
 import com.hearopilot.app.domain.model.RecordingMode
 import com.hearopilot.app.domain.usecase.llm.InsightOutputParser
+import com.hearopilot.app.domain.usecase.llm.InterviewOutputParser
+import com.hearopilot.app.domain.usecase.llm.InterviewPromptBuilder
 import com.hearopilot.app.domain.model.SupportedLanguages
 import com.hearopilot.app.domain.model.ThermalThrottle
 import com.hearopilot.app.domain.model.TranscriptionSegment
@@ -56,6 +58,9 @@ class SyncSttLlmUseCase(
         private const val MAX_TOKENS_SHORT_MEETING    = 600
         private const val MAX_TOKENS_LONG_MEETING     = 768
         private const val MAX_TOKENS_TRANSLATION      = 256
+        // Interview Mode uses a richer dual-output schema (question + answer + coaching_tips)
+        // so it gets the same budget as LONG_MEETING to avoid truncation mid-answer.
+        private const val MAX_TOKENS_INTERVIEW        = 768
 
         // Number of completed segments kept in the rolling context buffer.
         private const val MAX_CONTEXT_SEGMENTS = 3
@@ -110,6 +115,11 @@ class SyncSttLlmUseCase(
         var intervalMs = baseIntervalMs
         var currentSystemPrompt = buildSystemPrompt(mode, settings, outputLanguage, topic)
         var currentSamplerConfig = settings.llmSamplerConfig
+        // For Interview Mode the role is carried in the topic field and restated in
+        // each user prompt via InterviewPromptBuilder for better role-anchoring.
+        val interviewRole = if (mode == RecordingMode.INTERVIEW) {
+            topic?.takeIf { it.isNotBlank() } ?: "Software Engineer"
+        } else null
 
         // When an explicit output language is chosen, parse JSON with that locale's field
         // names (e.g. Italian → "titolo"/"riepilogo"/"azioni") so the parser matches the
@@ -254,7 +264,13 @@ class SyncSttLlmUseCase(
 
                         // Build the prompt before launching so its char count is available
                         // for the isLargeContext() check before the model reload.
-                        val finalPrompt = buildUserPrompt(mode, contextBuffer, newContent)
+                        // Interview Mode uses a dedicated prompt builder that restates the
+                        // role and omits the rolling context prefix (questions are self-contained).
+                        val finalPrompt = if (mode == RecordingMode.INTERVIEW && interviewRole != null) {
+                            InterviewPromptBuilder.build(interviewRole, newContent)
+                        } else {
+                            buildUserPrompt(mode, contextBuffer, newContent)
+                        }
 
                         // Proactively switch to conservative threads if this context size has
                         // previously caused RAM pressure on this device (adaptive threshold).
@@ -284,16 +300,33 @@ class SyncSttLlmUseCase(
                                 val rawOutput = insightBuilder.toString().trim()
 
                                 if (rawOutput.isNotBlank()) {
-                                    val parsed = parseInsightOutput(rawOutput, mode, parseSettings)
-                                    send(LlmInsight(
-                                        id = UUID.randomUUID().toString(),
-                                        sessionId = sessionId,
-                                        title = parsed.title,
-                                        content = parsed.content,
-                                        tasks = parsed.tasks,
-                                        timestamp = insightTimestamp,
-                                        sourceSegmentIds = sourceIds
-                                    ))
+                                    val insight = if (mode == RecordingMode.INTERVIEW &&
+                                                      interviewRole != null) {
+                                        // Dual-output path: parse into InterviewInsight then
+                                        // map to LlmInsight for uniform persistence and UI.
+                                        val interviewInsight = InterviewOutputParser.parse(
+                                            rawOutput = rawOutput,
+                                            role = interviewRole
+                                        )
+                                        InterviewOutputParser.toLlmInsight(
+                                            interviewInsight = interviewInsight,
+                                            sessionId = sessionId,
+                                            timestamp = insightTimestamp,
+                                            sourceSegmentIds = sourceIds
+                                        )
+                                    } else {
+                                        val parsed = parseInsightOutput(rawOutput, mode, parseSettings)
+                                        LlmInsight(
+                                            id = UUID.randomUUID().toString(),
+                                            sessionId = sessionId,
+                                            title = parsed.title,
+                                            content = parsed.content,
+                                            tasks = parsed.tasks,
+                                            timestamp = insightTimestamp,
+                                            sourceSegmentIds = sourceIds
+                                        )
+                                    }
+                                    send(insight)
                                 }
                             } catch (e: Exception) {
                                 // Re-throw CancellationException so the coroutine machinery
@@ -336,10 +369,11 @@ class SyncSttLlmUseCase(
 
     private fun calculateIntervalMs(mode: RecordingMode, settings: AppSettings): Long {
         return when (mode) {
-            RecordingMode.SIMPLE_LISTENING     -> settings.simpleListeningIntervalSeconds * 1000L
-            RecordingMode.SHORT_MEETING        -> settings.shortMeetingIntervalSeconds * 1000L
-            RecordingMode.LONG_MEETING         -> settings.longMeetingIntervalMinutes * 60 * 1000L
+            RecordingMode.SIMPLE_LISTENING      -> settings.simpleListeningIntervalSeconds * 1000L
+            RecordingMode.SHORT_MEETING         -> settings.shortMeetingIntervalSeconds * 1000L
+            RecordingMode.LONG_MEETING          -> settings.longMeetingIntervalMinutes * 60 * 1000L
             RecordingMode.REAL_TIME_TRANSLATION -> settings.translationIntervalSeconds * 1000L
+            RecordingMode.INTERVIEW             -> settings.interviewIntervalSeconds * 1000L
         }
     }
 
@@ -350,6 +384,7 @@ class SyncSttLlmUseCase(
         RecordingMode.SHORT_MEETING         -> MAX_TOKENS_SHORT_MEETING
         RecordingMode.LONG_MEETING          -> MAX_TOKENS_LONG_MEETING
         RecordingMode.REAL_TIME_TRANSLATION -> MAX_TOKENS_TRANSLATION
+        RecordingMode.INTERVIEW             -> MAX_TOKENS_INTERVIEW
     }
 
     // ─── System prompt ───────────────────────────────────────────────────────────
@@ -377,6 +412,18 @@ class SyncSttLlmUseCase(
                 val englishName = SupportedLanguages.getByCode(code)?.englishName ?: code
                 settings.translationSystemPrompt.replace("{target_language}", englishName)
             }
+            RecordingMode.INTERVIEW -> {
+                // Role is stored in the topic field (e.g. "Developer", "Product Manager").
+                // Substitute it into the prompt template's {role} placeholder.
+                val role = if (!topic.isNullOrBlank()) topic else "Software Engineer"
+                val storedPrompt = settings.interviewSystemPrompt
+                val defaultPrompt = settingsRepository.getDefaultPromptForMode(mode)
+                val template = if (storedPrompt != defaultPrompt) storedPrompt
+                               else if (!targetLangCode.isNullOrEmpty())
+                                   resourceProvider.getPromptForMode(mode, targetLangCode)
+                               else storedPrompt
+                template.replace("{role}", role)
+            }
             else -> {
                 val storedPrompt = when (mode) {
                     RecordingMode.SIMPLE_LISTENING -> settings.simpleListeningSystemPrompt
@@ -399,6 +446,10 @@ class SyncSttLlmUseCase(
                 }
             }
         }
+        // For INTERVIEW mode the role is already baked into the prompt via {role} substitution
+        // above; do NOT prepend the generic topic prefix so the prompt stays focused.
+        if (mode == RecordingMode.INTERVIEW) return basePrompt
+
         // Prepend topic context if provided so the model focuses on the stated subject.
         // Topic is passed verbatim — never translated — since the user typed it themselves.
         // The surrounding sentence is localized to the output language.

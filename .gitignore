@@ -18,6 +18,9 @@ local.properties
 *.dex
 .idea/
 
+# graphify-cache/
+graphify-out/cache/
+
 # Release bundles and APKs
 app/release/
 *.aab

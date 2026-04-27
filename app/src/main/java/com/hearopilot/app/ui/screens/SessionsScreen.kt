@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import com.hearopilot.app.ui.R
 import androidx.compose.ui.graphics.Brush
 import com.hearopilot.app.ui.ui.theme.*
 import com.hearopilot.app.domain.model.RecordingMode
+import com.hearopilot.app.domain.model.SessionTemplate
 import com.hearopilot.app.domain.model.TranscriptionSession
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.SupportedLanguage
@@ -54,11 +56,19 @@ fun SessionsScreen(
     onNavigateToSessionDetails: (String) -> Unit = {},
     onNavigateToRecording: (String) -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
+    quickStart: Boolean = false,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var sessionIdToDelete by remember { mutableStateOf<String?>(null) }
     var sessionIdToAnalyze by remember { mutableStateOf<String?>(null) }
+
+    // Quick-start: auto-open New Session dialog (pre-filled with first template if available)
+    LaunchedEffect(quickStart, uiState.templates) {
+        if (quickStart && !uiState.showNewSessionDialog) {
+            viewModel.showNewSessionDialog()
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -146,14 +156,19 @@ fun SessionsScreen(
                     )
                 }
 
-                uiState.sessions.isEmpty() -> {
+                uiState.allSessions.isEmpty() -> {
                     EmptyState()
                 }
 
                 else -> {
                     SessionsList(
-                        sessions = uiState.sessions,
+                        sessions = uiState.filteredSessions,
+                        allSessions = uiState.allSessions,
                         totalDataSizeBytes = uiState.totalDataSizeBytes,
+                        selectedDateFilter = uiState.selectedDateFilter,
+                        selectedModeFilter = uiState.selectedModeFilter,
+                        onDateFilterChange = { viewModel.setDateFilter(it) },
+                        onModeFilterChange = { viewModel.setModeFilter(it) },
                         onSessionClick = onNavigateToSessionDetails,
                         onDeleteClick = { sessionId ->
                             sessionIdToDelete = sessionId
@@ -168,7 +183,7 @@ fun SessionsScreen(
 
         // AI Insight Confirmation Dialog
         sessionIdToAnalyze?.let { sessionId ->
-            val session = uiState.sessions.find { it.id == sessionId }
+            val session = uiState.allSessions.find { it.id == sessionId }
             var selectedLang by remember { mutableStateOf("en") } // Default to English or use a dynamic default
 
             HistoryInsightConfirmDialog(
@@ -195,7 +210,7 @@ fun SessionsScreen(
 
         // Delete Confirmation Dialog
         sessionIdToDelete?.let { sessionId ->
-            val session = uiState.sessions.find { it.id == sessionId }
+            val session = uiState.allSessions.find { it.id == sessionId }
             AlertDialog(
                 onDismissRequest = { sessionIdToDelete = null },
                 title = { Text(stringResource(R.string.delete_session_title)) },
@@ -236,19 +251,29 @@ fun SessionsScreen(
                         onNavigateToRecording(sessionId)
                     }
                 },
-                settings = uiState.settings
+                onSaveTemplate = { name, mode, inputLang, outputLang, strategy, topic ->
+                    viewModel.saveTemplate(name, mode, inputLang, outputLang, strategy, topic)
+                },
+                onDeleteTemplate = { viewModel.deleteTemplate(it) },
+                settings = uiState.settings,
+                templates = uiState.templates
             )
         }
     }
 }
 
 /**
- * List of transcription sessions with a date/stats header.
+ * List of transcription sessions with a date/stats header and filter chips.
  */
 @Composable
 private fun SessionsList(
     sessions: List<TranscriptionSession>,
+    allSessions: List<TranscriptionSession>,
     totalDataSizeBytes: Long,
+    selectedDateFilter: com.hearopilot.app.presentation.sessions.DateFilter,
+    selectedModeFilter: RecordingMode?,
+    onDateFilterChange: (com.hearopilot.app.presentation.sessions.DateFilter) -> Unit,
+    onModeFilterChange: (RecordingMode?) -> Unit,
     onSessionClick: (String) -> Unit,
     onDeleteClick: (String) -> Unit,
     onAnalyzeClick: (String) -> Unit
@@ -256,26 +281,111 @@ private fun SessionsList(
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 88.dp + navBarPadding), // space for FAB + nav bar
+        contentPadding = PaddingValues(bottom = 88.dp + navBarPadding),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        // Date + stats header (no purple background)
+        // Stats header (operates on all sessions regardless of filter)
         item {
-            SessionsHeader(sessions = sessions, totalDataSizeBytes = totalDataSizeBytes)
-            Spacer(modifier = Modifier.height(8.dp))
+            SessionsHeader(sessions = allSessions, totalDataSizeBytes = totalDataSizeBytes)
         }
 
-        items(sessions, key = { it.id }) { session ->
-            SessionCard(
-                session = session,
-                onClick = { onSessionClick(session.id) },
-                onDelete = { onDeleteClick(session.id) },
-                onAnalyze = { onAnalyzeClick(session.id) },
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxWidth()
+        // Filter chips
+        item {
+            FilterChipsRow(
+                selectedDateFilter = selectedDateFilter,
+                selectedModeFilter = selectedModeFilter,
+                onDateFilterChange = onDateFilterChange,
+                onModeFilterChange = onModeFilterChange
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        if (sessions.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.filter_no_results),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            items(sessions, key = { it.id }) { session ->
+                SessionCard(
+                    session = session,
+                    onClick = { onSessionClick(session.id) },
+                    onDelete = { onDeleteClick(session.id) },
+                    onAnalyze = { onAnalyzeClick(session.id) },
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChipsRow(
+    selectedDateFilter: com.hearopilot.app.presentation.sessions.DateFilter,
+    selectedModeFilter: RecordingMode?,
+    onDateFilterChange: (com.hearopilot.app.presentation.sessions.DateFilter) -> Unit,
+    onModeFilterChange: (RecordingMode?) -> Unit
+) {
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Date filters
+        item {
+            FilterChip(
+                selected = selectedDateFilter == com.hearopilot.app.presentation.sessions.DateFilter.ALL,
+                onClick = { onDateFilterChange(com.hearopilot.app.presentation.sessions.DateFilter.ALL) },
+                label = { Text(stringResource(R.string.filter_all)) }
+            )
+        }
+        item {
+            FilterChip(
+                selected = selectedDateFilter == com.hearopilot.app.presentation.sessions.DateFilter.TODAY,
+                onClick = { onDateFilterChange(com.hearopilot.app.presentation.sessions.DateFilter.TODAY) },
+                label = { Text(stringResource(R.string.filter_today)) }
+            )
+        }
+        item {
+            FilterChip(
+                selected = selectedDateFilter == com.hearopilot.app.presentation.sessions.DateFilter.THIS_WEEK,
+                onClick = { onDateFilterChange(com.hearopilot.app.presentation.sessions.DateFilter.THIS_WEEK) },
+                label = { Text(stringResource(R.string.filter_this_week)) }
+            )
+        }
+        // Mode filters
+        RecordingMode.values().forEach { mode ->
+            item {
+                val label = when (mode) {
+                    RecordingMode.SIMPLE_LISTENING -> stringResource(R.string.mode_simple_listening)
+                    RecordingMode.SHORT_MEETING -> stringResource(R.string.mode_short_meeting)
+                    RecordingMode.LONG_MEETING -> stringResource(R.string.mode_long_meeting)
+                    RecordingMode.REAL_TIME_TRANSLATION -> stringResource(R.string.mode_translation_live)
+                    RecordingMode.INTERVIEW -> stringResource(R.string.mode_interview)
+                }
+                FilterChip(
+                    selected = selectedModeFilter == mode,
+                    onClick = {
+                        onModeFilterChange(if (selectedModeFilter == mode) null else mode)
+                    },
+                    label = { Text(label) }
+                )
+            }
         }
     }
 }
@@ -744,6 +854,7 @@ private fun recordingModeLabel(mode: RecordingMode): Int = when (mode) {
     RecordingMode.SHORT_MEETING         -> R.string.mode_short_meeting
     RecordingMode.LONG_MEETING          -> R.string.mode_long_meeting
     RecordingMode.REAL_TIME_TRANSLATION -> R.string.mode_translation_live
+    RecordingMode.INTERVIEW             -> R.string.mode_interview
 }
 
 /**
@@ -754,6 +865,7 @@ private fun recordingModeGradient(mode: RecordingMode): Brush = when (mode) {
     RecordingMode.SHORT_MEETING         -> ModeShortMeetingGradient
     RecordingMode.LONG_MEETING          -> ModeLongMeetingGradient
     RecordingMode.REAL_TIME_TRANSLATION -> ModeTranslationGradient
+    RecordingMode.INTERVIEW             -> ModeInterviewGradient
 }
 
 /**
@@ -764,6 +876,7 @@ private fun recordingModeTint(mode: RecordingMode): Color = when (mode) {
     RecordingMode.SHORT_MEETING         -> ModeShortMeetingTint
     RecordingMode.LONG_MEETING          -> ModeAmberTint
     RecordingMode.REAL_TIME_TRANSLATION -> ModeEmeraldTint
+    RecordingMode.INTERVIEW             -> ModeInterviewTint
 }
 
 /**

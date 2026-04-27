@@ -37,6 +37,10 @@ class AndroidResourceProvider @Inject constructor(
         return getStringResource("prompt_translation")
     }
 
+    override fun getInterviewPrompt(): String {
+        return getStringResource("prompt_interview")
+    }
+
     override fun getJsonFieldTitle(): String = getStringResource("json_field_title")
     override fun getJsonFieldSummary(): String = getStringResource("json_field_summary")
     override fun getJsonFieldActionItems(): String = getStringResource("json_field_action_items")
@@ -68,6 +72,7 @@ class AndroidResourceProvider @Inject constructor(
             RecordingMode.SHORT_MEETING         -> "prompt_short_meeting"
             RecordingMode.LONG_MEETING          -> "prompt_long_meeting"
             RecordingMode.REAL_TIME_TRANSLATION -> "prompt_translation"
+            RecordingMode.INTERVIEW             -> "prompt_interview"
         }
         return getStringResourceForLocale(resourceName, localeCode)
     }
@@ -151,6 +156,12 @@ class AndroidResourceProvider @Inject constructor(
                 "{\"title\": \"...\", \"summary\": \"...\", \"action_items\": [\"...\"]}"
             "session_topic_prefix" ->
                 "Main topic of this recording: \"%1\$s\". Focus your analysis on this subject."
+            "prompt_interview" ->
+                "You are an expert interview coach helping a candidate applying for a {role} position.\n" +
+                "Scan the transcript for interview questions being asked. When detected, craft a concise role-appropriate response.\n" +
+                "Output ONLY valid JSON:\n" +
+                "{\"title\": \"Question detected\", \"summary\": \"Suggested answer with 2-3 key talking points for the {role} role.\", \"action_items\": [\"Follow-up tip 1\", \"Follow-up tip 2\"]}\n" +
+                "If no clear question is detected, provide a brief coaching note on the content."
             else -> "AI assistant analyzing transcriptions."
         }
     }

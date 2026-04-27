@@ -32,6 +32,15 @@ data class SessionNameSearchResult(
     @ColumnInfo(name = "mode") val mode: String
 )
 
+data class ActionItemSearchResult(
+    @ColumnInfo(name = "id") val id: String,
+    @ColumnInfo(name = "session_id") val sessionId: String,
+    @ColumnInfo(name = "snippet_text") val snippetText: String,
+    @ColumnInfo(name = "session_name") val sessionName: String?,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "mode") val mode: String
+)
+
 // ── DAO ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -90,4 +99,22 @@ interface SearchDao {
         ORDER  BY created_at DESC
     """)
     fun searchSessionNames(query: String): Flow<List<SessionNameSearchResult>>
+
+    /**
+     * Find action items whose text contains [query].
+     * Returns one row per matching action item with the containing session metadata.
+     */
+    @Query("""
+        SELECT ai.id              AS id,
+               ai.session_id      AS session_id,
+               ai.text            AS snippet_text,
+               sess.name          AS session_name,
+               sess.created_at    AS created_at,
+               sess.mode          AS mode
+        FROM   action_items ai
+        JOIN   transcription_sessions sess ON ai.session_id = sess.id
+        WHERE  ai.text LIKE '%' || :query || '%'
+        ORDER  BY sess.created_at DESC
+    """)
+    fun searchActionItems(query: String): Flow<List<ActionItemSearchResult>>
 }

@@ -40,6 +40,12 @@ interface TranscriptionSegmentDao {
     suspend fun updateText(segmentId: String, newText: String)
 
     /**
+     * Update the speaker label of an existing segment. Null clears the label.
+     */
+    @Query("UPDATE transcription_segments SET speaker = :speaker WHERE id = :segmentId")
+    suspend fun updateSpeaker(segmentId: String, speaker: String?)
+
+    /**
      * Delete all segments for a session (usually handled by CASCADE).
      */
     @Query("DELETE FROM transcription_segments WHERE session_id = :sessionId")

@@ -23,6 +23,11 @@ interface ResourceProvider {
     fun getTranslationPrompt(): String
 
     /**
+     * Get the base interview prompt template (contains {role} placeholder).
+     */
+    fun getInterviewPrompt(): String
+
+    /**
      * Get the system prompt for a specific recording mode translated into the given locale.
      *
      * @param mode Recording mode determining which prompt key to load

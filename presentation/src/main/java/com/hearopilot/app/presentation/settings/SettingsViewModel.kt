@@ -270,6 +270,7 @@ class SettingsViewModel @Inject constructor(
                 com.hearopilot.app.domain.model.RecordingMode.SHORT_MEETING -> currentSettings.copy(shortMeetingSystemPrompt = prompt)
                 com.hearopilot.app.domain.model.RecordingMode.LONG_MEETING -> currentSettings.copy(longMeetingSystemPrompt = prompt)
                 com.hearopilot.app.domain.model.RecordingMode.REAL_TIME_TRANSLATION -> currentSettings.copy(translationSystemPrompt = prompt)
+                com.hearopilot.app.domain.model.RecordingMode.INTERVIEW -> currentSettings.copy(interviewSystemPrompt = prompt)
             }
             settingsRepository.updateSettings(updatedSettings)
         }
@@ -286,6 +287,7 @@ class SettingsViewModel @Inject constructor(
                 com.hearopilot.app.domain.model.RecordingMode.SHORT_MEETING -> currentSettings.copy(shortMeetingIntervalSeconds = interval)
                 com.hearopilot.app.domain.model.RecordingMode.LONG_MEETING -> currentSettings.copy(longMeetingIntervalMinutes = interval) // Minutes for long meeting
                 com.hearopilot.app.domain.model.RecordingMode.REAL_TIME_TRANSLATION -> currentSettings.copy(translationIntervalSeconds = interval)
+                com.hearopilot.app.domain.model.RecordingMode.INTERVIEW -> currentSettings.copy(interviewIntervalSeconds = interval)
             }
             settingsRepository.updateSettings(updatedSettings)
         }
@@ -317,6 +319,8 @@ class SettingsViewModel @Inject constructor(
                     _settings.value.copy(longMeetingSystemPrompt = defaultPrompt)
                 com.hearopilot.app.domain.model.RecordingMode.REAL_TIME_TRANSLATION ->
                     _settings.value.copy(translationSystemPrompt = defaultPrompt)
+                com.hearopilot.app.domain.model.RecordingMode.INTERVIEW ->
+                    _settings.value.copy(interviewSystemPrompt = defaultPrompt)
             }
             settingsRepository.updateSettings(updatedSettings)
         }
@@ -398,6 +402,7 @@ class SettingsViewModel @Inject constructor(
                 RecordingMode.SHORT_MEETING -> _settings.value.copy(shortMeetingDefaultStrategy = strategy)
                 RecordingMode.LONG_MEETING -> _settings.value.copy(longMeetingDefaultStrategy = strategy)
                 RecordingMode.REAL_TIME_TRANSLATION -> _settings.value.copy(translationDefaultStrategy = strategy)
+                RecordingMode.INTERVIEW -> _settings.value.copy(interviewDefaultStrategy = strategy)
             }
             settingsRepository.updateSettings(updatedSettings)
         }

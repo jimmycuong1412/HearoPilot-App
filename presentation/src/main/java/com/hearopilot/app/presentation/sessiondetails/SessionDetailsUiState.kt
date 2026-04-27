@@ -1,5 +1,6 @@
 ﻿package com.hearopilot.app.presentation.sessiondetails
 
+import com.hearopilot.app.domain.model.ActionItem
 import com.hearopilot.app.domain.model.BatchInsightProgress
 import com.hearopilot.app.domain.model.LlmInsight
 import com.hearopilot.app.domain.model.SessionWithDetails
@@ -56,7 +57,13 @@ data class SessionDetailsUiState(
      * The final (reduce-phase) merged insight from the history insight pipeline.
      * Set when the merge step completes; cleared when generation finishes or is cancelled.
      */
-    val finalHistoryInsight: LlmInsight? = null
+    val finalHistoryInsight: LlmInsight? = null,
+    /** Action items extracted from this session's insights, loaded reactively from the DB. */
+    val actionItems: List<ActionItem> = emptyList(),
+    /** ID of the segment for which the speaker assignment bottom sheet is open; null = closed. */
+    val speakerAssignmentSegmentId: String? = null,
+    /** ID of the insight currently being regenerated; null = no regeneration in progress. */
+    val regeneratingInsightId: String? = null
 )
 
 /**

@@ -98,6 +98,8 @@
     <string name="transcription_error">Error: %s</string>
 
     <!-- AI Insights Tab -->
+    <string name="live_sync_on">Live</string>
+    <string name="live_sync_off">Sync off</string>
     <string name="insights_disabled">AI insights are disabled</string>
     <string name="insights_disabled_subtitle">Enable AI Analysis in Settings to use this feature</string>
     <string name="insights_empty">AI insights will appear here</string>
@@ -129,6 +131,8 @@
     <string name="prompt_short_meeting">You are a meeting assistant analyzing discussions.\nWrite a title (max 8 words), a summary of key decisions and discussion points (at least 3-5 sentences, proportional to input length), and a list of actionable tasks.\nOutput ONLY valid JSON with this exact structure. No markdown. No code fences. No backticks:\n{\"title\": \"...\", \"summary\": \"...\", \"action_items\": [\"...\", \"...\"]}\nBe direct. Extract actionable tasks clearly.</string>
     <string name="prompt_long_meeting">You are an assistant analyzing extended discussions.\nWrite a title (max 8 words) capturing the main topic, a comprehensive summary of key topics, decisions, and conclusions (proportional to input length), and a list of actionable tasks.\nOutput ONLY valid JSON with this exact structure. No markdown. No code fences. No backticks:\n{\"title\": \"...\", \"summary\": \"...\", \"action_items\": [\"...\", \"...\"]}\nBe direct. Focus on high-level insights and concrete outcomes.</string>
     <string name="prompt_translation">You are a professional translator.\nTranslate the following text into {target_language}.\nOutput the translation only. No explanations, no labels, no prefixes.</string>
+    <!-- Interview mode prompt. {role} is replaced at runtime with the selected role name. -->
+    <string name="prompt_interview">You are an expert interview coach for a {role} candidate. Analyse the transcript and produce a JSON object with exactly these four fields:\n\"question_detected\": true if an interview question was asked (direct question, hypothetical, or request for example), false otherwise.\n\"detected_question\": the verbatim question extracted from the transcript, or null if question_detected is false.\n\"answer\": a concise, role-appropriate suggested answer the candidate can use — 2-3 key talking points tailored to the {role} role. If no question was detected, write a brief coaching observation instead.\n\"coaching_tips\": array of 2-3 short, actionable coaching tips relevant to the {role} role (delivery advice, follow-up suggestions, or behavioural guidance).\nOutput ONLY valid JSON. No markdown. No code fences. No backticks:\n{\"question_detected\": true, \"detected_question\": \"…\", \"answer\": \"…\", \"coaching_tips\": [\"…\", \"…\"]}\nBe direct, concise, and role-specific.</string>
     <!-- JSON output field names in English (default locale). Localized in values-XX/strings.xml. -->
     <string name="json_field_title">title</string>
     <string name="json_field_summary">summary</string>
@@ -330,14 +334,27 @@
     <string name="mode_short_meeting">Short Meeting</string>
     <string name="mode_long_meeting">Long Meeting</string>
     <string name="mode_translation_live">Live Translation</string>
+    <string name="mode_interview">Interview Coach</string>
     <string name="mode_simple_listening_desc">Periodic summaries</string>
     <string name="mode_short_meeting_desc">Summary, suggestions and tasks</string>
     <string name="mode_long_meeting_desc">In-depth analysis for long sessions</string>
     <string name="mode_translation_desc">Real-time translation</string>
+    <string name="mode_interview_desc">Real-time answer suggestions for interviews</string>
     <string name="new_session_output_language">Translation Output Language</string>
     <string name="new_session_output_language_label">Output Language</string>
     <string name="new_session_language_auto">Auto (Device Language)</string>
     <string name="new_session_insight_interval">Every %s</string>
+
+    <!-- Interview mode role selector -->
+    <string name="interview_role_label">Target role</string>
+    <string name="interview_role_hint">Select the role you are interviewing for</string>
+    <string name="interview_role_developer">Developer</string>
+    <string name="interview_role_devops">DevOps Engineer</string>
+    <string name="interview_role_tester">Tester / QA</string>
+    <string name="interview_role_product_manager">Product Manager</string>
+    <string name="interview_role_designer">UX Designer</string>
+    <string name="interview_role_data_scientist">Data Scientist</string>
+    <string name="interview_role_other">Other</string>
 
     <!-- Session Details - Tabs and Insight Card -->
     <string name="tab_transcript">Transcript</string>
@@ -437,6 +454,7 @@
     <string name="search_source_transcription">Transcript</string>
     <string name="search_source_insight">Insight</string>
     <string name="search_source_session_name">Session name</string>
+    <string name="search_source_action_item">Action item</string>
 
     <!-- Onboarding carousel messages shown while the LLM model is downloading -->
     <string name="onboarding_message_1">MeetMind AI listens so you don\'t have to take notes.</string>
@@ -499,4 +517,58 @@
     <string name="settings_llm_model_variant_phi4_mini_desc">Fast inference · Microsoft · Low latency insights</string>
     <string name="screen_wake_disable">Allow screen to turn off</string>
     <string name="screen_wake_enable">Keep screen on</string>
+
+    <!-- Session Details - Tasks tab -->
+    <string name="tab_tasks">Tasks</string>
+    <string name="tab_tasks_badge">Tasks (%d)</string>
+    <string name="tasks_empty">No action items yet.\nAction items are extracted from AI insights automatically.</string>
+    <string name="tasks_pending">Pending (%d)</string>
+    <string name="tasks_completed">Completed (%d)</string>
+
+    <!-- Share options -->
+    <string name="share_transcript">Share Transcript</string>
+    <string name="share_summary">Share Summary</string>
+
+    <!-- Sessions list filters -->
+    <string name="filter_all">All</string>
+    <string name="filter_today">Today</string>
+    <string name="filter_this_week">This week</string>
+    <string name="filter_no_results">No sessions match the selected filters</string>
+
+    <!-- Speaker labels -->
+    <string name="assign_speaker">Assign Speaker</string>
+    <string name="speaker_me">Me</string>
+    <string name="speaker_person_a">Person A</string>
+    <string name="speaker_person_b">Person B</string>
+    <string name="speaker_person_c">Person C</string>
+    <string name="speaker_person_d">Person D</string>
+    <string name="speaker_clear">Remove speaker label</string>
+
+    <!-- Session templates -->
+    <string name="templates_title">Templates</string>
+    <string name="templates_save">Save as Template</string>
+    <string name="templates_save_hint">Template name (e.g. Weekly standup)</string>
+    <string name="templates_empty">No templates yet.\nSave your session configuration as a template to reuse it.</string>
+    <string name="templates_delete_confirm">Delete template \"%s\"?</string>
+    <string name="template_badge">Template</string>
+    <string name="use_template">Use template</string>
+
+    <!-- Insight regeneration -->
+    <string name="regenerate_insight">Regenerate</string>
+    <string name="regenerate_insight_desc">Re-run AI analysis on this insight\'s source transcript</string>
+    <string name="regenerate_insight_no_source">Cannot regenerate: no source transcript segments found.</string>
+
+    <!-- Quick-start shortcut -->
+    <string name="shortcut_quick_start_label">Quick Start</string>
+    <string name="shortcut_quick_start_short_label">Start</string>
+
+    <!-- Interview Mode insight card labels -->
+    <!-- Header shown above a detected interview question in an insight card -->
+    <string name="interview_question_detected">Question Detected</string>
+    <!-- Header shown when the model provided a coaching note (no explicit question found) -->
+    <string name="interview_coaching_note">Coaching Note</string>
+    <!-- Section header for the AI-generated answer suggestion in an interview card -->
+    <string name="interview_answer_suggestion">Answer Suggestion</string>
+    <!-- Section header for coaching tips list in an interview card -->
+    <string name="interview_coaching_tips">Coaching Tips</string>
 </resources>

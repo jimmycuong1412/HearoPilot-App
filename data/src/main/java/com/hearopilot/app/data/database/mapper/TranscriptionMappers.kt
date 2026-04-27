@@ -1,8 +1,10 @@
 ﻿package com.hearopilot.app.data.database.mapper
 
+import com.hearopilot.app.data.database.entity.ActionItemEntity
 import com.hearopilot.app.data.database.entity.LlmInsightEntity
 import com.hearopilot.app.data.database.entity.TranscriptionSegmentEntity
 import com.hearopilot.app.data.database.entity.TranscriptionSessionEntity
+import com.hearopilot.app.domain.model.ActionItem
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.LlmInsight
 import com.hearopilot.app.domain.model.RecordingMode
@@ -74,7 +76,8 @@ fun TranscriptionSegmentEntity.toDomain(): TranscriptionSegment {
         sessionId = sessionId,
         text = text,
         timestamp = timestamp,
-        isComplete = isComplete
+        isComplete = isComplete,
+        speaker = speaker
     )
 }
 
@@ -87,7 +90,8 @@ fun TranscriptionSegment.toEntity(): TranscriptionSegmentEntity {
         sessionId = sessionId,
         text = text,
         timestamp = timestamp,
-        isComplete = isComplete
+        isComplete = isComplete,
+        speaker = speaker
     )
 }
 
@@ -126,6 +130,26 @@ fun LlmInsight.toEntity(): LlmInsightEntity {
         sourceSegmentIds = serializeSourceSegmentIds(sourceSegmentIds)
     )
 }
+
+// ========== ActionItem Mappers ==========
+
+fun ActionItemEntity.toDomain(): ActionItem = ActionItem(
+    id = id,
+    sessionId = sessionId,
+    insightId = insightId,
+    text = text,
+    isDone = isDone,
+    createdAt = createdAt
+)
+
+fun ActionItem.toEntity(): ActionItemEntity = ActionItemEntity(
+    id = id,
+    sessionId = sessionId,
+    insightId = insightId,
+    text = text,
+    isDone = isDone,
+    createdAt = createdAt
+)
 
 // ========== Helper Functions ==========
 

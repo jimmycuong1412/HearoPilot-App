@@ -126,6 +126,15 @@ interface TranscriptionRepository {
     suspend fun updateSegmentText(segmentId: String, newText: String): Result<Unit>
 
     /**
+     * Assign (or clear) a speaker label on a transcription segment.
+     *
+     * @param segmentId The segment ID to update
+     * @param speaker The speaker label (e.g. "Me", "Person A"), or null to clear
+     * @return Result indicating success or failure
+     */
+    suspend fun updateSegmentSpeaker(segmentId: String, speaker: String?): Result<Unit>
+
+    /**
      * Get all segments for a specific session ordered by timestamp.
      *
      * @param sessionId The session ID

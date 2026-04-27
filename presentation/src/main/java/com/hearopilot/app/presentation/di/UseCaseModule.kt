@@ -8,6 +8,8 @@ import com.hearopilot.app.domain.repository.TranscriptionRepository
 import com.hearopilot.app.domain.usecase.llm.GenerateBatchInsightUseCase
 import com.hearopilot.app.domain.usecase.llm.GenerateFinalInsightUseCase
 import com.hearopilot.app.domain.usecase.llm.GenerateHistoryInsightUseCase
+import com.hearopilot.app.domain.usecase.llm.InitializeLlmUseCase
+import com.hearopilot.app.domain.usecase.llm.RegenerateInsightUseCase
 import com.hearopilot.app.domain.usecase.llm.UpdateSystemPromptUseCase
 import com.hearopilot.app.domain.usecase.transcription.CreateSessionUseCase
 import com.hearopilot.app.domain.usecase.transcription.SearchTranscriptionsUseCase
@@ -21,6 +23,7 @@ import com.hearopilot.app.domain.usecase.transcription.UpdateInsightContentUseCa
 import com.hearopilot.app.domain.usecase.transcription.GetTotalDataSizeUseCase
 import com.hearopilot.app.domain.usecase.transcription.UpdateSessionDurationUseCase
 import com.hearopilot.app.domain.usecase.transcription.UpdateSegmentTextUseCase
+import com.hearopilot.app.domain.usecase.transcription.UpdateSegmentSpeakerUseCase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -103,6 +106,14 @@ object UseCaseModule {
 
     @Provides
     @ViewModelScoped
+    fun provideUpdateSegmentSpeakerUseCase(
+        repository: TranscriptionRepository
+    ): UpdateSegmentSpeakerUseCase {
+        return UpdateSegmentSpeakerUseCase(repository)
+    }
+
+    @Provides
+    @ViewModelScoped
     fun provideUpdateInsightContentUseCase(
         repository: TranscriptionRepository
     ): UpdateInsightContentUseCase {
@@ -170,5 +181,23 @@ object UseCaseModule {
         generateBatchInsightUseCase: GenerateBatchInsightUseCase
     ): GenerateHistoryInsightUseCase {
         return GenerateHistoryInsightUseCase(transcriptionRepository, generateBatchInsightUseCase)
+    }
+
+    @Provides
+    @ViewModelScoped
+    fun provideRegenerateInsightUseCase(
+        generateFinalInsightUseCase: GenerateFinalInsightUseCase,
+        updateInsightContentUseCase: UpdateInsightContentUseCase,
+        initializeLlmUseCase: InitializeLlmUseCase,
+        settingsRepository: SettingsRepository,
+        llmRepository: LlmRepository
+    ): RegenerateInsightUseCase {
+        return RegenerateInsightUseCase(
+            generateFinalInsightUseCase = generateFinalInsightUseCase,
+            updateInsightContentUseCase = updateInsightContentUseCase,
+            initializeLlmUseCase = initializeLlmUseCase,
+            settingsRepository = settingsRepository,
+            llmRepository = llmRepository
+        )
     }
 }

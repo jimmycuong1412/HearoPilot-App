@@ -190,6 +190,16 @@ val ModeTranslationGradient = Brush.linearGradient(
     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
 )
 
+// Interview Mode — rose/pink (professional, confident, energetic)
+val ModeInterviewLight = Color(0xFFFB7185)
+val ModeInterviewDark  = Color(0xFFE11D48)
+val ModeInterviewTint  = Color(0xFFF43F5E)
+val ModeInterviewGradient = Brush.linearGradient(
+    colors = listOf(ModeInterviewLight, ModeInterviewDark),
+    start = Offset(0f, 0f),
+    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+)
+
 // ── Download immersive screen ────────────────────────────────────────────────
 /** Deep navy used as the bottom stop of the full-screen download gradient. */
 val DownloadImmersiveNavy = Color(0xFF1A1A2E)

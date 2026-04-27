@@ -2,6 +2,7 @@
 
 import com.hearopilot.app.domain.model.AppSettings
 import com.hearopilot.app.domain.model.RecordingMode
+import com.hearopilot.app.domain.model.SessionTemplate
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -40,4 +41,21 @@ interface SettingsRepository {
      * Marks the history-insight coachmark as shown so it is never displayed again.
      */
     suspend fun markHistoryInsightCoachmarkShown()
+
+    // ========== Session Templates ==========
+
+    /**
+     * Observe the saved session configuration templates.
+     */
+    fun getTemplates(): Flow<List<SessionTemplate>>
+
+    /**
+     * Save a new template (appended to the list).
+     */
+    suspend fun saveTemplate(template: SessionTemplate)
+
+    /**
+     * Delete a template by ID.
+     */
+    suspend fun deleteTemplate(templateId: String)
 }

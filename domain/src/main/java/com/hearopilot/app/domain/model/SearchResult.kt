@@ -26,5 +26,6 @@ data class SearchResult(
 enum class SearchMatchSource {
     TRANSCRIPTION,
     INSIGHT,
-    SESSION_NAME
+    SESSION_NAME,
+    ACTION_ITEM
 }

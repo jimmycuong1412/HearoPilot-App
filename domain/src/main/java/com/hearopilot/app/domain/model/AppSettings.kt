@@ -19,12 +19,14 @@ data class AppSettings(
     val shortMeetingIntervalSeconds: Int = 60, // 60 s default gives the model enough context per inference
     val longMeetingIntervalMinutes: Int = 5, // Default: 5 min (options: 3, 5, 10)
     val translationIntervalSeconds: Int = 30, // 30 s default balances real-time feel with accuracy
+    val interviewIntervalSeconds: Int = 30, // 30 s — short enough to react quickly to questions
 
     // Mode-specific System Prompts (loaded from localized resources via SettingsRepository)
     val simpleListeningSystemPrompt: String = "",
     val shortMeetingSystemPrompt: String = "",
     val longMeetingSystemPrompt: String = "",
     val translationSystemPrompt: String = "",
+    val interviewSystemPrompt: String = "",
 
     // Translation settings — stores BCP-47 locale code (see SupportedLanguages)
     val translationTargetLanguage: String = SupportedLanguages.DEFAULT.code,
@@ -58,6 +60,7 @@ data class AppSettings(
     val shortMeetingDefaultStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
     val longMeetingDefaultStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
     val translationDefaultStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
+    val interviewDefaultStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
 
     // LLM sampler configuration — controls token selection during generation.
     val llmSamplerConfig: LlmSamplerConfig = LlmSamplerConfig(),

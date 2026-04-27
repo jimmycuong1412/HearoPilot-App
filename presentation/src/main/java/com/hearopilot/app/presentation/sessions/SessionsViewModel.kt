@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.RecordingMode
+import com.hearopilot.app.domain.model.SessionTemplate
+import com.hearopilot.app.domain.model.TranscriptionSession
+import java.util.Calendar
+import java.util.UUID
 import com.hearopilot.app.domain.repository.SettingsRepository
 import com.hearopilot.app.domain.usecase.transcription.CreateSessionUseCase
 import com.hearopilot.app.domain.usecase.transcription.DeleteSessionUseCase
@@ -51,6 +55,11 @@ class SessionsViewModel @Inject constructor(
                 _uiState.update { it.copy(totalDataSizeBytes = bytes) }
             }
         }
+        viewModelScope.launch {
+            settingsRepository.getTemplates().collect { templates ->
+                _uiState.update { it.copy(templates = templates) }
+            }
+        }
     }
 
     /**
@@ -70,14 +79,57 @@ class SessionsViewModel @Inject constructor(
                     }
                 }
                 .collect { sessions ->
-                    _uiState.update {
-                        it.copy(
-                            sessions = sessions,
+                    _uiState.update { state ->
+                        val filtered = applyFilters(sessions, state.selectedDateFilter, state.selectedModeFilter)
+                        state.copy(
+                            allSessions = sessions,
+                            filteredSessions = filtered,
                             isLoading = false,
                             error = null
                         )
                     }
                 }
+        }
+    }
+
+    fun setDateFilter(filter: DateFilter) {
+        _uiState.update { state ->
+            state.copy(
+                selectedDateFilter = filter,
+                filteredSessions = applyFilters(state.allSessions, filter, state.selectedModeFilter)
+            )
+        }
+    }
+
+    fun setModeFilter(mode: RecordingMode?) {
+        _uiState.update { state ->
+            state.copy(
+                selectedModeFilter = mode,
+                filteredSessions = applyFilters(state.allSessions, state.selectedDateFilter, mode)
+            )
+        }
+    }
+
+    private fun applyFilters(
+        sessions: List<TranscriptionSession>,
+        dateFilter: DateFilter,
+        modeFilter: RecordingMode?
+    ): List<TranscriptionSession> {
+        val now = System.currentTimeMillis()
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val weekStart = todayStart - 6L * 24 * 60 * 60 * 1000
+
+        return sessions.filter { session ->
+            val passesDate = when (dateFilter) {
+                DateFilter.ALL -> true
+                DateFilter.TODAY -> session.createdAt >= todayStart
+                DateFilter.THIS_WEEK -> session.createdAt >= weekStart
+            }
+            val passesMode = modeFilter == null || session.mode == modeFilter
+            passesDate && passesMode
         }
     }
 
@@ -146,6 +198,50 @@ class SessionsViewModel @Inject constructor(
                     }
                 }
             // Sessions list will automatically update via Flow
+        }
+    }
+
+    /**
+     * Save current session config as a named template.
+     *
+     * @param name Template name chosen by the user
+     * @param mode Recording mode
+     * @param inputLanguage BCP-47 input language code
+     * @param outputLanguage Optional translation target language
+     * @param insightStrategy REAL_TIME or END_OF_SESSION
+     * @param topic Optional topic hint
+     */
+    fun saveTemplate(
+        name: String,
+        mode: RecordingMode,
+        inputLanguage: String,
+        outputLanguage: String?,
+        insightStrategy: InsightStrategy,
+        topic: String?
+    ) {
+        viewModelScope.launch {
+            val template = SessionTemplate(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                mode = mode,
+                inputLanguage = inputLanguage,
+                outputLanguage = outputLanguage,
+                insightStrategy = insightStrategy,
+                topic = topic,
+                createdAt = System.currentTimeMillis()
+            )
+            settingsRepository.saveTemplate(template)
+        }
+    }
+
+    /**
+     * Delete a saved template.
+     *
+     * @param templateId The template ID to remove
+     */
+    fun deleteTemplate(templateId: String) {
+        viewModelScope.launch {
+            settingsRepository.deleteTemplate(templateId)
         }
     }
 

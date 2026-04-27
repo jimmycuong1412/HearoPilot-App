@@ -25,8 +25,10 @@ import com.hearopilot.app.domain.usecase.llm.InitializeLlmUseCase
 import com.hearopilot.app.domain.usecase.stt.StartSttStreamingUseCase
 import com.hearopilot.app.domain.usecase.stt.StopSttStreamingUseCase
 import com.hearopilot.app.domain.usecase.sync.SyncSttLlmUseCase
+import com.hearopilot.app.domain.usecase.llm.RegenerateInsightUseCase
 import com.hearopilot.app.domain.usecase.transcription.SaveInsightUseCase
 import com.hearopilot.app.domain.usecase.transcription.SaveSegmentUseCase
+import com.hearopilot.app.domain.usecase.transcription.UpdateInsightContentUseCase
 import com.hearopilot.app.domain.usecase.transcription.UpdateSessionDurationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -80,6 +82,8 @@ class MainViewModel @Inject constructor(
     private val initializeLlmUseCase: InitializeLlmUseCase,
     private val saveSegmentUseCase: SaveSegmentUseCase,
     private val saveInsightUseCase: SaveInsightUseCase,
+    private val updateInsightContentUseCase: UpdateInsightContentUseCase,
+    private val regenerateInsightUseCase: RegenerateInsightUseCase,
     private val updateSessionDurationUseCase: UpdateSessionDurationUseCase,
     private val settingsRepository: SettingsRepository,
     private val sttRepository: SttRepository,
@@ -160,7 +164,12 @@ class MainViewModel @Inject constructor(
                     currentOutputLanguage = session.outputLanguage
                     currentInsightStrategy = session.insightStrategy
                     currentTopic = session.topic
-                    _uiState.update { it.copy(insightStrategy = session.insightStrategy) }
+                    _uiState.update {
+                        it.copy(
+                            insightStrategy = session.insightStrategy,
+                            recordingMode = session.mode
+                        )
+                    }
                     Log.i(TAG, "Session config: mode=$currentRecordingMode, input=$currentInputLanguage, output=$currentOutputLanguage, strategy=$currentInsightStrategy, topic=$currentTopic")
                 }
         }
@@ -423,6 +432,12 @@ class MainViewModel @Inject constructor(
      * NEW: Registers stream with SessionManager and starts foreground service for screen-off recording.
      */
     fun startStreaming() {
+        if (!isInitialized) {
+            Log.i(TAG, "startStreaming called but not initialized, triggering initialization")
+            initialize(autoStartRecording = true)
+            return
+        }
+
         if (_uiState.value.isRecording) {
             Log.w(TAG, "Already recording")
             return
@@ -691,6 +706,7 @@ class MainViewModel @Inject constructor(
             // Must happen after the transcription drain so the model is no longer in use.
             // The heap is then available for LLM batch processing below.
             sttRepository.releaseModel()
+            isInitialized = false // Reset initialization state since models are released
 
             // Clear any lingering partial segment from the UI. The STT flush (SherpaOnnxDataSource)
             // already emits the remaining speech as a complete segment before closing the channel,
@@ -889,6 +905,59 @@ class MainViewModel @Inject constructor(
                 currentPartialSegment = null,
                 insights = emptyList()
             )
+        }
+    }
+
+    /**
+     * Re-run AI analysis for a specific insight in-place.
+     *
+     * Delegates to [RegenerateInsightUseCase] which owns all LLM initialization,
+     * source-text construction, inference, and persistence logic. Both this ViewModel
+     * and [com.hearopilot.app.presentation.sessiondetails.SessionDetailsViewModel] call
+     * the same shared use case, guaranteeing identical prompt construction and output
+     * handling regardless of which screen triggered the action.
+     *
+     * Only available when not actively recording (the LLM cannot run alongside STT).
+     */
+    fun regenerateInsight(insightId: String, modelNotDownloadedError: String) {
+        if (_uiState.value.isRecording) return
+        val insight = _uiState.value.insights.firstOrNull { it.id == insightId } ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(regeneratingInsightId = insightId, isInitializingLlm = true) }
+            llmProcessingServiceController.startProcessing()
+            try {
+                val result = regenerateInsightUseCase(
+                    insight = insight,
+                    sessionId = sessionId,
+                    mode = currentRecordingMode,
+                    outputLanguage = currentOutputLanguage,
+                    topic = currentTopic,
+                    allSegments = _uiState.value.completedSegments
+                )
+
+                _uiState.update { it.copy(isInitializingLlm = false) }
+
+                when (result) {
+                    is RegenerateInsightUseCase.RegenerateResult.Success -> { /* DB Flow updates UI */ }
+                    is RegenerateInsightUseCase.RegenerateResult.ModelNotDownloaded ->
+                        _uiState.update { it.copy(error = modelNotDownloadedError) }
+                    is RegenerateInsightUseCase.RegenerateResult.InitError ->
+                        _uiState.update {
+                            it.copy(error = result.cause.message ?: "Failed to initialize LLM")
+                        }
+                    is RegenerateInsightUseCase.RegenerateResult.EmptySource ->
+                        _uiState.update { it.copy(error = modelNotDownloadedError) }
+                    is RegenerateInsightUseCase.RegenerateResult.EmptyResponse -> { /* no-op */ }
+                    is RegenerateInsightUseCase.RegenerateResult.Error ->
+                        _uiState.update {
+                            it.copy(error = result.cause.message ?: "Failed to regenerate insight")
+                        }
+                }
+            } finally {
+                _uiState.update { it.copy(regeneratingInsightId = null, isInitializingLlm = false) }
+                llmProcessingServiceController.stopProcessing()
+            }
         }
     }
 

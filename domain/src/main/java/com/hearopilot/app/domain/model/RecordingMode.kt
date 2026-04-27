@@ -32,5 +32,13 @@ enum class RecordingMode {
      * Real-time translation of the input audio.
      * AI: Translates text segments.
      */
-    REAL_TIME_TRANSLATION
+    REAL_TIME_TRANSLATION,
+
+    /**
+     * Mock job-interview coaching.
+     * AI: Detects questions in the conversation and delivers timely, role-aware answers
+     * with suggested talking points and follow-up advice.
+     * Role is conveyed via the topic field (e.g. "Developer", "Product Manager").
+     */
+    INTERVIEW
 }

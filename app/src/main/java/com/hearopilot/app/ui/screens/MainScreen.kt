@@ -533,6 +533,7 @@ fun MainScreen(
                             modifier = Modifier.fillMaxSize()
                         )
                         1 -> {
+                            val context = LocalContext.current
                             InsightsSection(
                                 insights = uiState.sortedInsights,
                                 segments = uiState.completedSegments,
@@ -543,9 +544,19 @@ fun MainScreen(
                                 isRecording = uiState.isRecording,
                                 insightStrategy = uiState.insightStrategy,
                                 batchProgress = uiState.batchProgress,
+                                recordingMode = uiState.recordingMode,
                                 onDownloadLlm = {
                                     onNavigateToLlmDownload()
                                 },
+                                onRegenerate = if (!uiState.isRecording && !uiState.isFinalizingSession) {
+                                    { insight ->
+                                        viewModel.regenerateInsight(
+                                            insight.id,
+                                            context.getString(R.string.llm_model_not_downloaded_error)
+                                        )
+                                    }
+                                } else null,
+                                regeneratingInsightId = uiState.regeneratingInsightId,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

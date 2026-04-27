@@ -4,10 +4,12 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.hearopilot.app.data.database.dao.ActionItemDao
 import com.hearopilot.app.data.database.dao.LlmInsightDao
 import com.hearopilot.app.data.database.dao.SearchDao
 import com.hearopilot.app.data.database.dao.TranscriptionSegmentDao
 import com.hearopilot.app.data.database.dao.TranscriptionSessionDao
+import com.hearopilot.app.data.database.entity.ActionItemEntity
 import com.hearopilot.app.data.database.entity.LlmInsightEntity
 import com.hearopilot.app.data.database.entity.TranscriptionSegmentEntity
 import com.hearopilot.app.data.database.entity.TranscriptionSessionEntity
@@ -46,9 +48,10 @@ import com.hearopilot.app.data.database.entity.TranscriptionSessionEntity
     entities = [
         TranscriptionSessionEntity::class,
         TranscriptionSegmentEntity::class,
-        LlmInsightEntity::class
+        LlmInsightEntity::class,
+        ActionItemEntity::class
     ],
-    version = 6,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -57,6 +60,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun transcriptionSegmentDao(): TranscriptionSegmentDao
     abstract fun llmInsightDao(): LlmInsightDao
     abstract fun searchDao(): SearchDao
+    abstract fun actionItemDao(): ActionItemDao
 
     companion object {
         const val DATABASE_NAME = "libellula_transcription.db"
@@ -115,6 +119,44 @@ abstract class AppDatabase : RoomDatabase() {
                 // Add topic column; existing sessions have no topic
                 database.execSQL(
                     "ALTER TABLE transcription_sessions ADD COLUMN topic TEXT"
+                )
+            }
+        }
+
+        /**
+         * Database version 7:
+         * - Added action_items table for tracking extracted task completion status
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS action_items (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        insight_id TEXT NOT NULL,
+                        text TEXT NOT NULL,
+                        is_done INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        FOREIGN KEY (session_id) REFERENCES transcription_sessions(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_action_items_session_id ON action_items(session_id)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_action_items_insight_id ON action_items(insight_id)")
+            }
+        }
+
+        /**
+         * Database version 8:
+         * - Added speaker column (nullable TEXT) to transcription_segments
+         *   for manual speaker labeling (e.g. "Me", "Person A")
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE transcription_segments ADD COLUMN speaker TEXT"
                 )
             }
         }
