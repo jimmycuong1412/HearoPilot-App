@@ -1,4 +1,4 @@
-﻿package com.hearopilot.app.domain.usecase.transcription
+package com.hearopilot.app.domain.usecase.transcription
 
 import com.hearopilot.app.domain.model.InsightStrategy
 import com.hearopilot.app.domain.model.RecordingMode
@@ -26,6 +26,8 @@ class CreateSessionUseCase(
      * @param outputLanguage Optional target language for translation mode
      * @param insightStrategy Whether to generate insights in real-time or at end of session
      * @param topic Optional main subject/topic for focused AI insights
+     * @param intervalSeconds Optional per-session override (in seconds) for the LLM coaching
+     *                         interval. Null = use the global per-mode default from AppSettings.
      * @return Result containing the created session or an error
      */
     suspend operator fun invoke(
@@ -34,7 +36,8 @@ class CreateSessionUseCase(
         inputLanguage: String,
         outputLanguage: String? = null,
         insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
-        topic: String? = null
+        topic: String? = null,
+        intervalSeconds: Int? = null
     ): Result<TranscriptionSession> {
         return transcriptionRepository.createSession(
             name = name?.takeIf { it.isNotBlank() },
@@ -42,7 +45,8 @@ class CreateSessionUseCase(
             inputLanguage = inputLanguage,
             outputLanguage = outputLanguage,
             insightStrategy = insightStrategy,
-            topic = topic?.takeIf { it.isNotBlank() }
+            topic = topic?.takeIf { it.isNotBlank() },
+            intervalSeconds = intervalSeconds?.takeIf { it > 0 }
         )
     }
 }

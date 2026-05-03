@@ -43,7 +43,8 @@ fun TranscriptionSessionEntity.toDomain(): TranscriptionSession {
         } catch (e: IllegalArgumentException) {
             InsightStrategy.REAL_TIME // Safe fallback for legacy rows
         },
-        topic = topic
+        topic = topic,
+        intervalSeconds = intervalSeconds
     )
 }
 
@@ -61,7 +62,8 @@ fun TranscriptionSession.toEntity(): TranscriptionSessionEntity {
         outputLanguage = outputLanguage,
         durationMs = durationMs,
         insightStrategy = insightStrategy.name,
-        topic = topic
+        topic = topic,
+        intervalSeconds = intervalSeconds
     )
 }
 

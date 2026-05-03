@@ -55,8 +55,12 @@ import com.hearopilot.app.ui.ui.theme.*
 @Composable
 fun NewSessionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String?, RecordingMode, String, String?, InsightStrategy, String?) -> Unit,
-    onSaveTemplate: ((String, RecordingMode, String, String?, InsightStrategy, String?) -> Unit)? = null,
+    /**
+     * Confirm callback. The trailing [Int]? carries the per-session "Coaching frequency"
+     * override in seconds — null means "use the global per-mode default at start time".
+     */
+    onConfirm: (String?, RecordingMode, String, String?, InsightStrategy, String?, Int?) -> Unit,
+    onSaveTemplate: ((String, RecordingMode, String, String?, InsightStrategy, String?, Int?) -> Unit)? = null,
     onDeleteTemplate: ((String) -> Unit)? = null,
     settings: AppSettings = AppSettings(),
     templates: List<SessionTemplate> = emptyList()
@@ -83,6 +87,9 @@ fun NewSessionDialog(
     var insightStrategy by remember {
         mutableStateOf(settings.simpleListeningDefaultStrategy)
     }
+    // Per-session "Coaching frequency" override (seconds). Null = use global per-mode default.
+    // Reset whenever the mode changes so the slider always starts from the new default.
+    var intervalOverrideSeconds by remember { mutableStateOf<Int?>(null) }
 
     // Template save dialog state
     var showSaveTemplateDialog by remember { mutableStateOf(false) }
@@ -102,6 +109,8 @@ fun NewSessionDialog(
             RecordingMode.REAL_TIME_TRANSLATION -> settings.translationDefaultStrategy
             RecordingMode.INTERVIEW             -> settings.interviewDefaultStrategy
         }
+        // Reset interval override on mode change — slider will show the new mode's default.
+        intervalOverrideSeconds = null
     }
 
     // For INTERVIEW mode, role is the effective topic; otherwise use the text field value.
@@ -168,7 +177,10 @@ fun NewSessionDialog(
                             Button(
                                 onClick = {
                                     val langArg = outputLanguage.ifEmpty { null }
-                                    onConfirm(effectiveTopic, selectedMode, inputLanguage, langArg, insightStrategy, effectiveTopic)
+                                    onConfirm(
+                                        effectiveTopic, selectedMode, inputLanguage, langArg,
+                                        insightStrategy, effectiveTopic, intervalOverrideSeconds
+                                    )
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White,
@@ -237,6 +249,7 @@ fun NewSessionDialog(
                                             } else {
                                                 sessionTopic = template.topic ?: ""
                                             }
+                                            intervalOverrideSeconds = template.intervalSeconds
                                         },
                                         onDelete = { onDeleteTemplate?.invoke(template.id) }
                                     )
@@ -331,6 +344,18 @@ fun NewSessionDialog(
                         )
                     }
 
+                    // Per-session "Coaching frequency" override.
+                    // Only meaningful when LLM is enabled AND the strategy is REAL_TIME
+                    // (END_OF_SESSION fires once at stop, so per-session interval is moot).
+                    if (settings.llmEnabled && insightStrategy == InsightStrategy.REAL_TIME) {
+                        CoachingFrequencySelector(
+                            mode = selectedMode,
+                            settings = settings,
+                            overrideSeconds = intervalOverrideSeconds,
+                            onOverrideChange = { intervalOverrideSeconds = it }
+                        )
+                    }
+
                 }
             }
         }
@@ -355,7 +380,10 @@ fun NewSessionDialog(
                     onClick = {
                         if (templateName.isNotBlank()) {
                             val langArg = outputLanguage.ifEmpty { null }
-                            onSaveTemplate?.invoke(templateName.trim(), selectedMode, inputLanguage, langArg, insightStrategy, effectiveTopic)
+                            onSaveTemplate?.invoke(
+                                templateName.trim(), selectedMode, inputLanguage, langArg,
+                                insightStrategy, effectiveTopic, intervalOverrideSeconds
+                            )
                             templateName = ""
                             showSaveTemplateDialog = false
                         }
@@ -727,3 +755,102 @@ fun LanguageSelector(
         }
     }
 }
+
+/**
+ * Per-session "Coaching frequency" slider.
+ *
+ * Initial position = the global per-mode default (so first paint reads as a no-op).
+ * As soon as the user moves it, [overrideSeconds] becomes non-null and that value
+ * is stamped onto the session at create time, winning over [AppSettings] in
+ * [SyncSttLlmUseCase]. A small "Use default" link clears the override.
+ *
+ * Range is mode-aware: long-meeting goes up to 30 min, the rest stay in seconds.
+ */
+@Composable
+private fun CoachingFrequencySelector(
+    mode: RecordingMode,
+    settings: AppSettings,
+    overrideSeconds: Int?,
+    onOverrideChange: (Int?) -> Unit
+) {
+    // Per-mode default (in seconds) and slider range. LONG_MEETING is stored as minutes
+    // in AppSettings; convert to seconds so a single Int? roundtrips through the DB.
+    val defaultSeconds: Int
+    val minSeconds: Int
+    val maxSeconds: Int
+    val stepSeconds: Int
+    when (mode) {
+        RecordingMode.SIMPLE_LISTENING -> {
+            defaultSeconds = settings.simpleListeningIntervalSeconds
+            minSeconds = 10; maxSeconds = 180; stepSeconds = 10
+        }
+        RecordingMode.SHORT_MEETING -> {
+            defaultSeconds = settings.shortMeetingIntervalSeconds
+            minSeconds = 10; maxSeconds = 180; stepSeconds = 10
+        }
+        RecordingMode.LONG_MEETING -> {
+            defaultSeconds = settings.longMeetingIntervalMinutes * 60
+            minSeconds = 60; maxSeconds = 30 * 60; stepSeconds = 60
+        }
+        RecordingMode.REAL_TIME_TRANSLATION -> {
+            defaultSeconds = settings.translationIntervalSeconds
+            minSeconds = 10; maxSeconds = 120; stepSeconds = 5
+        }
+        RecordingMode.INTERVIEW -> {
+            defaultSeconds = settings.interviewIntervalSeconds
+            minSeconds = 10; maxSeconds = 120; stepSeconds = 5
+        }
+    }
+
+    val currentSeconds = overrideSeconds ?: defaultSeconds
+    val steps = ((maxSeconds - minSeconds) / stepSeconds - 1).coerceAtLeast(0)
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.new_session_interval_label),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (overrideSeconds != null) {
+                TextButton(
+                    onClick = { onOverrideChange(null) },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.new_session_interval_use_default),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+        Slider(
+            value = currentSeconds.toFloat(),
+            onValueChange = { f ->
+                // Snap to the nearest step so the persisted value is always tidy.
+                val snapped = (((f.toInt() - minSeconds) / stepSeconds) * stepSeconds + minSeconds)
+                    .coerceIn(minSeconds, maxSeconds)
+                onOverrideChange(snapped)
+            },
+            valueRange = minSeconds.toFloat()..maxSeconds.toFloat(),
+            steps = steps
+        )
+        Text(
+            text = if (overrideSeconds == null) {
+                stringResource(R.string.new_session_interval_default_hint, formatIntervalLabel(defaultSeconds, mode))
+            } else {
+                stringResource(R.string.new_session_interval_override_hint, currentSeconds)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Format an interval (in seconds) for the helper text — minutes for LONG_MEETING, seconds otherwise. */
+private fun formatIntervalLabel(seconds: Int, mode: RecordingMode): String =
+    if (mode == RecordingMode.LONG_MEETING) "${seconds / 60} min" else "${seconds}s"

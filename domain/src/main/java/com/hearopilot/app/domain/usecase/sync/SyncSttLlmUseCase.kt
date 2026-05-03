@@ -99,6 +99,9 @@ class SyncSttLlmUseCase(
      * @param inputLanguage Language of the audio source
      * @param outputLanguage Target language BCP-47 code for translation (if applicable)
      * @param topic Optional session topic injected into the system prompt for focused analysis
+     * @param sessionIntervalSeconds Optional per-session override (seconds) for the LLM coaching
+     *                               interval. When non-null and > 0, overrides
+     *                               [AppSettings.{mode}IntervalSeconds] for this invocation.
      * @return Flow of LLM insights
      */
     operator fun invoke(
@@ -107,10 +110,11 @@ class SyncSttLlmUseCase(
         mode: RecordingMode,
         inputLanguage: String,
         outputLanguage: String?,
-        topic: String? = null
+        topic: String? = null,
+        sessionIntervalSeconds: Int? = null
     ): Flow<LlmInsight> = channelFlow {
         val settings = settingsRepository.getSettings().first()
-        var baseIntervalMs = calculateIntervalMs(mode, settings)
+        var baseIntervalMs = calculateIntervalMs(mode, settings, sessionIntervalSeconds)
         var thermalFactor = 1.0f
         var intervalMs = baseIntervalMs
         var currentSystemPrompt = buildSystemPrompt(mode, settings, outputLanguage, topic)
@@ -138,10 +142,11 @@ class SyncSttLlmUseCase(
         // Initialize system prompt
         llmRepository.updateSystemPrompt(currentSystemPrompt)
 
-        // Monitor settings changes (interval and system prompt are reactive)
+        // Monitor settings changes (interval and system prompt are reactive).
+        // The per-session override (when set) wins over any updated global default.
         launch {
             settingsRepository.getSettings().collect { updatedSettings ->
-                baseIntervalMs = calculateIntervalMs(mode, updatedSettings)
+                baseIntervalMs = calculateIntervalMs(mode, updatedSettings, sessionIntervalSeconds)
                 intervalMs = (baseIntervalMs * thermalFactor).toLong()
                 val newPrompt = buildSystemPrompt(mode, updatedSettings, outputLanguage, topic)
 
@@ -367,7 +372,18 @@ class SyncSttLlmUseCase(
 
     // ─── Interval ───────────────────────────────────────────────────────────────
 
-    private fun calculateIntervalMs(mode: RecordingMode, settings: AppSettings): Long {
+    /**
+     * Resolve the inference interval for [mode], applying the per-session [overrideSeconds]
+     * when present. A non-null, positive [overrideSeconds] always wins over the global
+     * per-mode default in [settings] — this is what makes "Coaching frequency" in the
+     * New Session dialog actually take effect.
+     */
+    private fun calculateIntervalMs(
+        mode: RecordingMode,
+        settings: AppSettings,
+        overrideSeconds: Int? = null
+    ): Long {
+        overrideSeconds?.takeIf { it > 0 }?.let { return it * 1000L }
         return when (mode) {
             RecordingMode.SIMPLE_LISTENING      -> settings.simpleListeningIntervalSeconds * 1000L
             RecordingMode.SHORT_MEETING         -> settings.shortMeetingIntervalSeconds * 1000L

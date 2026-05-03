@@ -13,6 +13,8 @@ package com.hearopilot.app.domain.model
  * @property insightStrategy REAL_TIME or END_OF_SESSION
  * @property topic Optional pre-filled topic/context hint
  * @property createdAt Unix timestamp (ms) for ordering
+ * @property intervalSeconds Optional per-session coaching interval override (seconds).
+ *                            Null = use the global per-mode default at session-creation time.
  */
 data class SessionTemplate(
     val id: String,
@@ -22,5 +24,6 @@ data class SessionTemplate(
     val outputLanguage: String?,
     val insightStrategy: InsightStrategy,
     val topic: String?,
-    val createdAt: Long
+    val createdAt: Long,
+    val intervalSeconds: Int? = null
 )

@@ -53,7 +53,8 @@ class TranscriptionRepositoryImpl @Inject constructor(
         inputLanguage: String,
         outputLanguage: String?,
         insightStrategy: InsightStrategy,
-        topic: String?
+        topic: String?,
+        intervalSeconds: Int?
     ): Result<TranscriptionSession> {
         return try {
             val now = System.currentTimeMillis()
@@ -73,7 +74,8 @@ class TranscriptionRepositoryImpl @Inject constructor(
                 inputLanguage = inputLanguage,
                 outputLanguage = outputLanguage,
                 insightStrategy = insightStrategy,
-                topic = topic?.takeIf { it.isNotBlank() }
+                topic = topic?.takeIf { it.isNotBlank() },
+                intervalSeconds = intervalSeconds?.takeIf { it > 0 }
             )
             sessionDao.insert(session.toEntity())
             Result.success(session)

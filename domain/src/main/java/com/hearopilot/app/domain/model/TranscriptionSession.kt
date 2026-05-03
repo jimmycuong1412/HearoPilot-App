@@ -1,4 +1,4 @@
-﻿package com.hearopilot.app.domain.model
+package com.hearopilot.app.domain.model
 
 /**
  * Represents a transcription session - a single recording session with its own context.
@@ -13,7 +13,11 @@
  * @property recordingMode Mode of recording (Simple, Short Meeting, Long Meeting, Translation)
  * @property durationMs Total recording duration in milliseconds (0 until the session is stopped)
  * @property insightStrategy Whether insights are generated periodically or in one batch at end of session
- * @property topic Optional main subject/topic for focused AI insights (e.g., "Q1 Budget Review")
+ * @property topic Optional main subject/topic for focused AI insights
+ * @property intervalSeconds Optional per-session override for the LLM coaching interval, in seconds.
+ *                           Null means "use the global per-mode default from AppSettings".
+ *                           For LONG_MEETING this value is expressed in seconds (the global
+ *                           default is in minutes — multiply when seeding).
  */
 data class TranscriptionSession(
     val id: String,
@@ -25,5 +29,6 @@ data class TranscriptionSession(
     val outputLanguage: String? = null, // Target language for translation mode, null otherwise
     val durationMs: Long = 0L,
     val insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
-    val topic: String? = null // Optional main subject for focused AI insights
+    val topic: String? = null, // Optional main subject for focused AI insights
+    val intervalSeconds: Int? = null // Per-session override; null = use global per-mode default
 )

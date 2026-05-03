@@ -51,7 +51,7 @@ import com.hearopilot.app.data.database.entity.TranscriptionSessionEntity
         LlmInsightEntity::class,
         ActionItemEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -157,6 +157,20 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL(
                     "ALTER TABLE transcription_segments ADD COLUMN speaker TEXT"
+                )
+            }
+        }
+
+        /**
+         * Database version 9:
+         * - Added interval_seconds column (nullable INTEGER) to transcription_sessions.
+         *   Stores a per-session override for the LLM coaching interval (in seconds).
+         *   Null preserves legacy behaviour: use the global per-mode default from AppSettings.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE transcription_sessions ADD COLUMN interval_seconds INTEGER"
                 )
             }
         }
