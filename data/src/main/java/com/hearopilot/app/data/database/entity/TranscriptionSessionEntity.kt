@@ -1,4 +1,4 @@
-﻿package com.hearopilot.app.data.database.entity
+package com.hearopilot.app.data.database.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
@@ -41,5 +41,12 @@ data class TranscriptionSessionEntity(
     val insightStrategy: String = "REAL_TIME",
 
     @ColumnInfo(name = "topic")
-    val topic: String? = null
+    val topic: String? = null,
+
+    /**
+     * Optional per-session override for the LLM coaching interval, in seconds.
+     * Null = fall back to the global per-mode default in [AppSettings].
+     */
+    @ColumnInfo(name = "interval_seconds")
+    val intervalSeconds: Int? = null
 )

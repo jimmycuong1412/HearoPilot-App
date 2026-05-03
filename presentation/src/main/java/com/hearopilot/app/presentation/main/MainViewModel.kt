@@ -121,6 +121,9 @@ class MainViewModel @Inject constructor(
     private var currentOutputLanguage: String? = null
     private var currentInsightStrategy: InsightStrategy = InsightStrategy.REAL_TIME
     private var currentTopic: String? = null
+    // Per-session override for the LLM coaching interval (seconds).
+    // Null = fall back to AppSettings.{mode}IntervalSeconds in SyncSttLlmUseCase.
+    private var currentIntervalSeconds: Int? = null
 
     // Shared STT stream — retained so insightsJob can be restarted mid-session
     private var activeSharedSttStream: SharedFlow<TranscriptionSegment>? = null
@@ -164,13 +167,14 @@ class MainViewModel @Inject constructor(
                     currentOutputLanguage = session.outputLanguage
                     currentInsightStrategy = session.insightStrategy
                     currentTopic = session.topic
+                    currentIntervalSeconds = session.intervalSeconds
                     _uiState.update {
                         it.copy(
                             insightStrategy = session.insightStrategy,
                             recordingMode = session.mode
                         )
                     }
-                    Log.i(TAG, "Session config: mode=$currentRecordingMode, input=$currentInputLanguage, output=$currentOutputLanguage, strategy=$currentInsightStrategy, topic=$currentTopic")
+                    Log.i(TAG, "Session config: mode=$currentRecordingMode, input=$currentInputLanguage, output=$currentOutputLanguage, strategy=$currentInsightStrategy, topic=$currentTopic, intervalSeconds=$currentIntervalSeconds")
                 }
         }
 
@@ -232,6 +236,7 @@ class MainViewModel @Inject constructor(
                 currentOutputLanguage = session.outputLanguage
                 currentInsightStrategy = session.insightStrategy
                 currentTopic = session.topic
+                currentIntervalSeconds = session.intervalSeconds
             }
 
             // Initialize STT
@@ -575,7 +580,8 @@ class MainViewModel @Inject constructor(
                     mode = currentRecordingMode,
                     inputLanguage = currentInputLanguage,
                     outputLanguage = currentOutputLanguage,
-                    topic = currentTopic
+                    topic = currentTopic,
+                    sessionIntervalSeconds = currentIntervalSeconds
                 )
                     .catch { e ->
                         // Handle errors without crashing
@@ -629,7 +635,8 @@ class MainViewModel @Inject constructor(
                 mode = mode,
                 inputLanguage = inputLanguage,
                 outputLanguage = outputLanguage,
-                topic = currentTopic
+                topic = currentTopic,
+                sessionIntervalSeconds = currentIntervalSeconds
             )
                 .catch { e ->
                     Log.e(TAG, "LLM error after job restart", e)

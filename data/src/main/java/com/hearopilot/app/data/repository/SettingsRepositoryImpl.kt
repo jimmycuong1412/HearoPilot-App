@@ -307,6 +307,7 @@ class SettingsRepositoryImpl @Inject constructor(
                 put("insightStrategy", t.insightStrategy.name)
                 put("topic", t.topic ?: JSONObject.NULL)
                 put("createdAt", t.createdAt)
+                put("intervalSeconds", t.intervalSeconds ?: JSONObject.NULL)
             })
         }
         return arr.toString()
@@ -326,7 +327,9 @@ class SettingsRepositoryImpl @Inject constructor(
                         outputLanguage = obj.optString("outputLanguage").takeIf { it.isNotEmpty() && it != "null" },
                         insightStrategy = InsightStrategy.valueOf(obj.getString("insightStrategy")),
                         topic = obj.optString("topic").takeIf { it.isNotEmpty() && it != "null" },
-                        createdAt = obj.getLong("createdAt")
+                        createdAt = obj.getLong("createdAt"),
+                        intervalSeconds = if (obj.isNull("intervalSeconds")) null
+                                          else obj.optInt("intervalSeconds", 0).takeIf { it > 0 }
                     )
                 } catch (_: Exception) { null }
             }

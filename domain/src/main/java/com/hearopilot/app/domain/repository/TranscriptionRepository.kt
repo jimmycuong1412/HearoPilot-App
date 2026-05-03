@@ -29,6 +29,8 @@ interface TranscriptionRepository {
      * @param outputLanguage Optional target language for translation mode
      * @param insightStrategy Whether insights are generated in real-time or at end of session
      * @param topic Optional main subject/topic for focused AI insights
+     * @param intervalSeconds Optional per-session override (in seconds) for the LLM coaching
+     *                         interval. Null = use the global per-mode default from AppSettings.
      * @return Result containing the created session or an error
      */
     suspend fun createSession(
@@ -37,7 +39,8 @@ interface TranscriptionRepository {
         inputLanguage: String,
         outputLanguage: String? = null,
         insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
-        topic: String? = null
+        topic: String? = null,
+        intervalSeconds: Int? = null
     ): Result<TranscriptionSession>
 
     /**

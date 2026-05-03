@@ -246,13 +246,15 @@ fun SessionsScreen(
         if (uiState.showNewSessionDialog) {
             NewSessionDialog(
                 onDismiss = { viewModel.hideNewSessionDialog() },
-                onConfirm = { name, mode, inputLang, outputLang, strategy, topic ->
-                    viewModel.createSession(name, mode, inputLang, outputLang, strategy, topic) { sessionId ->
+                onConfirm = { name, mode, inputLang, outputLang, strategy, topic, intervalSeconds ->
+                    viewModel.createSession(
+                        name, mode, inputLang, outputLang, strategy, topic, intervalSeconds
+                    ) { sessionId ->
                         onNavigateToRecording(sessionId)
                     }
                 },
-                onSaveTemplate = { name, mode, inputLang, outputLang, strategy, topic ->
-                    viewModel.saveTemplate(name, mode, inputLang, outputLang, strategy, topic)
+                onSaveTemplate = { name, mode, inputLang, outputLang, strategy, topic, intervalSeconds ->
+                    viewModel.saveTemplate(name, mode, inputLang, outputLang, strategy, topic, intervalSeconds)
                 },
                 onDeleteTemplate = { viewModel.deleteTemplate(it) },
                 settings = uiState.settings,

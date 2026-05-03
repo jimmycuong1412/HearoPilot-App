@@ -345,6 +345,12 @@
     <string name="new_session_language_auto">Auto (Device Language)</string>
     <string name="new_session_insight_interval">Every %s</string>
 
+    <!-- Per-session "Coaching frequency" override (overrides the global per-mode default) -->
+    <string name="new_session_interval_label">Coaching frequency</string>
+    <string name="new_session_interval_default_hint">Default for this mode (%s)</string>
+    <string name="new_session_interval_override_hint">Override: every %ds</string>
+    <string name="new_session_interval_use_default">Use default</string>
+
     <!-- Interview mode role selector -->
     <string name="interview_role_label">Target role</string>
     <string name="interview_role_hint">Select the role you are interviewing for</string>

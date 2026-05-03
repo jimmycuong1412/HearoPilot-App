@@ -165,10 +165,11 @@ class SessionsViewModel @Inject constructor(
         outputLanguage: String?,
         insightStrategy: InsightStrategy = InsightStrategy.REAL_TIME,
         topic: String? = null,
+        intervalSeconds: Int? = null,
         onSessionCreated: (String) -> Unit
     ) {
         viewModelScope.launch {
-            createSessionUseCase(name, mode, inputLanguage, outputLanguage, insightStrategy, topic)
+            createSessionUseCase(name, mode, inputLanguage, outputLanguage, insightStrategy, topic, intervalSeconds)
                 .onSuccess { session ->
                     _uiState.update { it.copy(showNewSessionDialog = false) }
                     onSessionCreated(session.id)
@@ -217,7 +218,8 @@ class SessionsViewModel @Inject constructor(
         inputLanguage: String,
         outputLanguage: String?,
         insightStrategy: InsightStrategy,
-        topic: String?
+        topic: String?,
+        intervalSeconds: Int? = null
     ) {
         viewModelScope.launch {
             val template = SessionTemplate(
@@ -228,7 +230,8 @@ class SessionsViewModel @Inject constructor(
                 outputLanguage = outputLanguage,
                 insightStrategy = insightStrategy,
                 topic = topic,
-                createdAt = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                intervalSeconds = intervalSeconds
             )
             settingsRepository.saveTemplate(template)
         }
